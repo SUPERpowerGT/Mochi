@@ -9,6 +9,12 @@ Mochi is an experimental VS Code extension that brings an OpenAI Agents SDK runt
 
 The project is intentionally local-first. Runtime state, memory, and traces are stored on your machine, while workspace tools operate only against the selected local folder.
 
+## Demo
+
+<video src="media/mochi-demo.mov" controls width="720"></video>
+
+If the video does not render in your Markdown viewer, open `media/mochi-demo.mov` directly.
+
 ## Features
 
 - Editor-native chat panel with streamed assistant replies.
