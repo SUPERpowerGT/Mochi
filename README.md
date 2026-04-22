@@ -76,11 +76,13 @@ npm install
 Configure model credentials:
 
 ```bash
-chmod +x ./scripts/setup_openai.sh
-./scripts/setup_openai.sh
+chmod +x ./scripts/setup_model.sh
+./scripts/setup_model.sh
 ```
 
 The setup script asks for provider, API key, model, optional shell integration, and optional proxy settings. Mochi reads `~/.openai-env` directly at runtime, so most users can accept the defaults and start the extension after setup.
+
+To switch between OpenAI and Gemini later, run `./scripts/setup_model.sh` again and choose the other provider. The script keeps provider-specific keys separately and rewrites the active OpenAI-compatible runtime variables.
 
 Start the VS Code extension:
 
@@ -143,7 +145,7 @@ This makes the extension useful for real local work while keeping potentially su
 ```text
 src/extension/   VS Code activation, commands, webview UI, and chat controller
 src/runtime/     OpenAI Agents SDK runtime, tools, prompts, memory, and tracing
-scripts/         OpenAI environment setup helper
+scripts/         Model provider setup helper
 doc/             Architecture notes, feature notes, roadmap, and command reference
 media/           Extension and README assets
 ```

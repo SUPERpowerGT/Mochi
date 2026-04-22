@@ -15,7 +15,7 @@ Initial project goals:
 
 Key files introduced in the early structure:
 
-- `scripts/setup_openai.sh`
+- `scripts/setup_model.sh`
 - `scripts/openai_api.sh`
 - `scripts/agent_llm.sh`
 - `src/agent/minimal_agent.py`
@@ -52,7 +52,7 @@ Later cleanup:
 
 - removed the Python reference agent after the JavaScript runtime became the only maintained product path
 - removed the shell prompt wrapper after the VS Code JavaScript runtime became the only maintained product path
-- kept `scripts/setup_openai.sh` for local model provider environment configuration
+- kept `scripts/setup_model.sh` for local model provider environment configuration
 
 ## Phase 3: VS Code Runtime Shift To OpenAI Agents SDK
 
@@ -817,7 +817,7 @@ As of this log:
 
 - the VS Code extension runs on the OpenAI Agents SDK path
 - the JavaScript runtime is the only maintained product runtime
-- `scripts/setup_openai.sh` remains useful for OpenAI environment setup
+- `scripts/setup_model.sh` remains useful for model provider environment setup
 - the codebase now has a long-term structure for tools, prompts, agents, and memory
 
 ## Phase 43: Rolling Session Compaction
@@ -920,7 +920,7 @@ The setup helper now supports choosing between OpenAI and Gemini without changin
 
 What changed:
 
-- `scripts/setup_openai.sh` now starts with a provider choice
+- `scripts/setup_model.sh` now starts with a provider choice
 - OpenAI keeps the default `https://api.openai.com/v1` endpoint and `gpt-4.1-mini` model
 - Gemini writes a Google AI Studio key into the OpenAI-compatible environment variables used by the Node SDK
 - Gemini setup also stores `GEMINI_API_KEY` for clarity while keeping `OPENAI_API_KEY` for SDK compatibility

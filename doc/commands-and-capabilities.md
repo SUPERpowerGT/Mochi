@@ -211,7 +211,7 @@ This is not a VS Code command-palette command, but it is still part of the local
 
 Path:
 
-- `./scripts/setup_openai.sh`
+- `./scripts/setup_model.sh`
 
 What it does:
 
@@ -224,8 +224,8 @@ What it does:
 Use:
 
 ```bash
-chmod +x ./scripts/setup_openai.sh
-./scripts/setup_openai.sh
+chmod +x ./scripts/setup_model.sh
+./scripts/setup_model.sh
 ```
 
 ## Which Path To Use
