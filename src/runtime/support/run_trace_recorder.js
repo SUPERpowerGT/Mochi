@@ -1,7 +1,9 @@
 const { analyzeRunVerification } = require("./verification_policy");
 const { recordRunStop } = require("./tool_lifecycle");
 
-function createRunTrace(prompt) {
+const { buildProviderErrorDiagnostic } = require("./provider_context");
+
+function createRunTrace(prompt, providerContext = null) {
   return {
     prompt,
     startedAt: new Date().toISOString(),
@@ -16,6 +18,8 @@ function createRunTrace(prompt) {
     verification: null,
     lifecycleEvents: [],
     lifecycle: null,
+    provider: providerContext,
+    providerError: null,
     interactionGuard: {
       clearedClarificationBeforeTool: false,
     },
@@ -44,6 +48,7 @@ function finalizeRunTrace(trace, { status, reply, error }) {
   trace.replyPreview =
     typeof reply === "string" && reply ? reply.slice(0, 400) : trace.replyPreview || "";
   trace.error = error ? error.message || String(error) : null;
+  trace.providerError = error ? buildProviderErrorDiagnostic(error, trace.provider || {}) : null;
   trace.verification = analyzeRunVerification(trace);
   recordRunStop(trace);
   return JSON.parse(JSON.stringify(trace));

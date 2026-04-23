@@ -19,6 +19,7 @@ function createCompactMemorySnapshot(snapshot) {
       note: "Mochi memory is stored in the local VS Code extension storage area and is not part of the workspace repository.",
     },
     workspaceRoot: snapshot.workspaceRoot || "",
+    provider: snapshot.provider || null,
     sessionId: snapshot.sessionId || "",
     sessionSummary: snapshot.session
       ? {

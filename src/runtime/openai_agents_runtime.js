@@ -27,6 +27,10 @@ const {
   selectSkillsForSubagent,
 } = require("./support/skill_selector");
 const {
+  formatProviderErrorMessage,
+  getProviderContext,
+} = require("./support/provider_context");
+const {
   extractTextDelta,
   mapStreamEventToActivity,
 } = require("./support/stream_event_mapper");
@@ -48,6 +52,8 @@ class OpenAIAgentsRuntime {
     this.zod = null;
     this.modelProvider = null;
     this.runnerConfig = null;
+    this.providerContext = null;
+    this.providerSignature = "";
     this.agents = null;
     this.runStateStorage = new AsyncLocalStorage();
     this.activeToolRunId = "";
@@ -75,7 +81,7 @@ class OpenAIAgentsRuntime {
       id: `run:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       prompt,
       baseSessionId: options.baseSessionId || this.getBaseSessionId(),
-      trace: createRunTrace(prompt),
+      trace: createRunTrace(prompt, this.providerContext),
       streamedText: "",
       clearedClarificationDraft: false,
     };
@@ -128,7 +134,7 @@ class OpenAIAgentsRuntime {
         reply: text,
         error: null,
       });
-      await this.memoryManager.finalizeRun({
+      const finalizeResult = await this.memoryManager.finalizeRun({
         sessionId: memoryState.sessionId,
         taskId: memoryState.taskId,
         taskPlan: memoryState.taskPlan,
@@ -137,6 +143,7 @@ class OpenAIAgentsRuntime {
         history: slimHistoryForStorage(result.history),
         trace,
       });
+      await this.runMemoryMaintenanceIfNeeded(finalizeResult);
       this.emitActivity({
         kind: "status",
         text: "Run complete.",
@@ -156,7 +163,7 @@ class OpenAIAgentsRuntime {
       if (memoryState && memoryState.sessionId) {
         await this.memoryManager.recordRunTrace(memoryState.sessionId, trace);
       }
-      throw error;
+      throw this.createProviderAwareError(error);
     } finally {
       this.releaseToolRun(runState);
       if (this.currentRunState === runState) {
@@ -173,7 +180,15 @@ class OpenAIAgentsRuntime {
   }
 
   async getMemorySnapshot() {
-    return this.memoryManager.getSnapshot();
+    loadOpenAIEnvFile();
+    if (!this.providerContext) {
+      this.providerContext = getProviderContext();
+    }
+    const snapshot = await this.memoryManager.getSnapshot();
+    return {
+      ...snapshot,
+      provider: this.providerContext || getProviderContext(),
+    };
   }
 
   setBaseSessionId(baseSessionId) {
@@ -252,7 +267,7 @@ class OpenAIAgentsRuntime {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const subTrace = createRunTrace(task);
+    const subTrace = createRunTrace(task, this.providerContext);
     subTrace.kind = "subagent";
     subTrace.agentKey = agentKey || "";
     subTrace.agentName = agentName || agentKey || "Subagent";
@@ -305,6 +320,7 @@ class OpenAIAgentsRuntime {
       runState.trace.selectedSkills = runState.rootSkills ? runState.rootSkills.metadata : null;
     }
     return [
+      this.buildProviderRoutingGuidance(),
       buildDelegationGuidance(policy),
       runState && runState.rootSkills ? runState.rootSkills.text : "",
     ]
@@ -314,6 +330,8 @@ class OpenAIAgentsRuntime {
 
   async getSdk() {
     if (this.sdk && this.zod) {
+      loadOpenAIEnvFile();
+      this.configureModelProvider();
       return this.sdk;
     }
 
@@ -341,10 +359,22 @@ class OpenAIAgentsRuntime {
       return;
     }
 
+    this.providerContext = getProviderContext();
+    const nextSignature = [
+      this.providerContext.provider,
+      this.providerContext.model,
+      this.providerContext.baseURL,
+      this.providerContext.apiFormat,
+      this.providerContext.activeKeyKind,
+    ].join("|");
+    if (this.providerSignature && this.providerSignature !== nextSignature) {
+      this.agents = null;
+    }
+    this.providerSignature = nextSignature;
     const apiKey = process.env.OPENAI_API_KEY || "";
-    const baseURL = process.env.OPENAI_BASE_URL || "";
-    const apiFormat = process.env.OPENAI_API_FORMAT || "chat_completions";
-    const providerName = process.env.MOCHI_MODEL_PROVIDER || inferProviderFromBaseUrl(baseURL);
+    const baseURL = this.providerContext.baseURL || "";
+    const apiFormat = this.providerContext.apiFormat || "chat_completions";
+    const providerName = this.providerContext.provider || inferProviderFromBaseUrl(baseURL);
     const useResponses = apiFormat !== "chat_completions";
 
     if (typeof this.sdk.setOpenAIAPI === "function") {
@@ -374,6 +404,73 @@ class OpenAIAgentsRuntime {
       return runner.run(agent, input, { stream: true });
     }
     return sdk.run(agent, input, { stream: true });
+  }
+
+  async runMemoryMaintenanceIfNeeded(finalizeResult) {
+    const candidate =
+      finalizeResult && finalizeResult.maintenanceCandidate
+        ? finalizeResult.maintenanceCandidate
+        : null;
+
+    if (!candidate || !candidate.sessionId || !candidate.sessionSummary) {
+      return;
+    }
+
+    try {
+      const agentBundle = this.agents || (await this.getRootAgent(), this.agents);
+      const maintenanceAgent = agentBundle && agentBundle.memoryMaintainerAgent
+        ? agentBundle.memoryMaintainerAgent
+        : null;
+      if (!maintenanceAgent || !this.sdk) {
+        return;
+      }
+
+      const input = [
+        this.sdk.system("Memory maintenance request. Rewrite the compacted session summary as strict JSON."),
+        this.sdk.user(buildMemoryMaintenancePrompt(candidate)),
+      ];
+
+      let result = null;
+      if (this.runnerConfig && typeof this.sdk.Runner === "function") {
+        const runner = new this.sdk.Runner(this.runnerConfig);
+        result = await runner.run(maintenanceAgent, input, { stream: false });
+      } else {
+        result = await this.sdk.run(maintenanceAgent, input, { stream: false });
+      }
+
+      const output = this.extractFinalOutput(result);
+      const parsed = parseMemoryMaintenanceOutput(output);
+      if (!parsed || !parsed.rewriteSummary) {
+        return;
+      }
+
+      await this.memoryManager.applyMemoryMaintenance(candidate.sessionId, parsed);
+    } catch (error) {
+      // Memory maintenance is best-effort and should never block the main user flow.
+    }
+  }
+
+  buildProviderRoutingGuidance() {
+    const context = this.providerContext || getProviderContext();
+    const lines = [
+      "Runtime provider guidance:",
+      `- Active provider/model: ${context.provider || "unknown"} / ${context.model || "unknown"}.`,
+      "- Provider and model are recorded in the run trace for Tracy-style inspection.",
+    ];
+
+    if (context.rateLimitSensitive && context.lowerCostModelSuggestion) {
+      lines.push(
+        `- This model may be rate-limit or cost sensitive. Prefer direct work for small tasks and suggest ${context.lowerCostModelSuggestion} if the run hits 429/quota errors.`
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  createProviderAwareError(error) {
+    const wrapped = new Error(formatProviderErrorMessage(error, this.providerContext || {}));
+    wrapped.cause = error;
+    return wrapped;
   }
 
   getRuntimeTools() {
@@ -667,6 +764,60 @@ function limitSubagentText(value, maxChars) {
   }
 
   return `${text.slice(0, Math.max(0, maxChars - 15))}\n...[truncated]`;
+}
+
+function buildMemoryMaintenancePrompt(candidate) {
+  const sections = [
+    "Current compacted session summary:",
+    candidate.sessionSummary || "",
+  ];
+
+  if (candidate.compactedAt) {
+    sections.push("", `Compacted at: ${candidate.compactedAt}`);
+  }
+
+  if (candidate.sessionCompaction) {
+    sections.push("", "Compaction metadata:", JSON.stringify(candidate.sessionCompaction, null, 2));
+  }
+
+  if (candidate.task) {
+    sections.push("", "Representative task:", JSON.stringify(candidate.task, null, 2));
+  }
+
+  if (candidate.lastRunTraceSummary) {
+    sections.push("", "Last run trace summary:", JSON.stringify(candidate.lastRunTraceSummary, null, 2));
+  }
+
+  sections.push(
+    "",
+    "Rewrite the session summary so it preserves durable facts, confirmed decisions, active goals, and unresolved blockers.",
+    "Delete duplicated, stale, contradicted, speculative, or clearly incorrect claims.",
+    "Return JSON only."
+  );
+
+  return sections.join("\n");
+}
+
+function parseMemoryMaintenanceOutput(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      rewriteSummary: typeof parsed.rewriteSummary === "string" ? parsed.rewriteSummary.trim() : "",
+      removedClaims: Array.isArray(parsed.removedClaims) ? parsed.removedClaims.filter(Boolean) : [],
+      keptFocus: Array.isArray(parsed.keptFocus) ? parsed.keptFocus.filter(Boolean) : [],
+      notes: typeof parsed.notes === "string" ? parsed.notes.trim() : "",
+    };
+  } catch (error) {
+    return null;
+  }
 }
 
 function inferProviderFromBaseUrl(baseUrl) {

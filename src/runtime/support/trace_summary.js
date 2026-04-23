@@ -17,6 +17,8 @@ function summarizeRunTrace(trace) {
     startedAt: trace.startedAt || null,
     finishedAt: trace.finishedAt || null,
     outcome: summarizeOutcome(trace),
+    provider: trace.provider || null,
+    providerError: trace.providerError || null,
     tools: {
       total: policySource.length,
       highRisk: countPolicyEvents(policySource, (event) => event.risk === "high"),
@@ -60,6 +62,8 @@ function summarizeSubagentRuns(subagentRuns) {
       agentKey: run.agentKey || "",
       agentName: run.agentName || "",
       status: trace.status || "unknown",
+      provider: trace.provider || null,
+      providerError: trace.providerError || null,
       workspaceRoot: evidence.workspaceRoot || trace.workspaceRoot || "",
       toolUseCount:
         typeof evidence.toolUseCount === "number" ? evidence.toolUseCount : toolCalls.length,

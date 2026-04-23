@@ -3,6 +3,7 @@ const { REPO_GUIDE_INSTRUCTIONS } = require("../prompts/repo_guide_instructions"
 const { CODING_AGENT_INSTRUCTIONS } = require("../prompts/coding_instructions");
 const { PLAN_REVIEWER_INSTRUCTIONS } = require("../prompts/plan_reviewer_instructions");
 const { REVIEW_AGENT_INSTRUCTIONS } = require("../prompts/review_instructions");
+const { MEMORY_MAINTAINER_INSTRUCTIONS } = require("../prompts/memory_maintainer_instructions");
 const { wrapToolsWithLifecycle } = require("../support/tool_lifecycle");
 const { createSubagentTools } = require("../tools/subagent_tools");
 
@@ -50,11 +51,19 @@ function createAgents({
     tools: reviewTools,
   });
 
+  const memoryMaintainerAgent = new Agent({
+    name: "Memory Maintainer",
+    instructions: joinInstructions(MEMORY_MAINTAINER_INSTRUCTIONS, runtimeIdentity),
+    model,
+    tools: [],
+  });
+
   const subAgents = {
     repo_guide: repoGuideAgent,
     coding: codingAgent,
     plan_reviewer: planReviewerAgent,
     review: reviewAgent,
+    memory_maintainer: memoryMaintainerAgent,
   };
   const subagentTools = zod
     ? wrapToolsWithLifecycle(
@@ -93,6 +102,7 @@ function createAgents({
     codingAgent,
     planReviewerAgent,
     reviewAgent,
+    memoryMaintainerAgent,
     subAgents,
   };
 }
