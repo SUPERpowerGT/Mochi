@@ -56,7 +56,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - run: semgrep ci --config=auto --sarif --output=semgrep.sarif
+      - run: semgrep scan --config=auto --sarif --output=semgrep.sarif
         continue-on-error: true
       - uses: github/codeql-action/upload-sarif@v3
         with:
