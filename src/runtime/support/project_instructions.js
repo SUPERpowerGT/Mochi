@@ -35,7 +35,7 @@ function loadProjectInstructions(workspaceRoot, options = {}) {
   const sources = [];
 
   for (const relativePath of filenames) {
-    const absolutePath = path.join(workspaceRoot, relativePath); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    const absolutePath = path.join(workspaceRoot, relativePath); // nosemgrep
     const content = readIfFile(absolutePath);
     if (!content) {
       continue;

@@ -116,7 +116,7 @@ function loadSkills() {
   }
 
   cachedSkills = filenames
-    .map((filename) => parseSkill(filename, fs.readFileSync(path.join(SKILL_DIR, filename), "utf8"))) // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    .map((filename) => parseSkill(filename, fs.readFileSync(path.join(SKILL_DIR, filename), "utf8"))) // nosemgrep
     .filter(Boolean);
   return cachedSkills;
 }

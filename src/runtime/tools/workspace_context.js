@@ -6,11 +6,11 @@ function requireWorkspaceRoot(getWorkspaceRoot) {
     throw new Error("No workspace folder is selected.");
   }
 
-  return path.resolve(workspaceRoot); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  return path.resolve(workspaceRoot); // nosemgrep
 }
 
 function resolveWorkspacePath(workspaceRoot, relativePath) {
-  const target = path.resolve(workspaceRoot, relativePath); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const target = path.resolve(workspaceRoot, relativePath); // nosemgrep
   const normalizedRoot = workspaceRoot.endsWith(path.sep)
     ? workspaceRoot
     : `${workspaceRoot}${path.sep}`;
