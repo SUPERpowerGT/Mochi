@@ -5,6 +5,10 @@
   "version": "0.0.1",
   "publisher": "local",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SUPERpowerGT/Mochi.git"
+  },
   "type": "commonjs",
   "engines": {
     "vscode": "^1.90.0"

@@ -26,4 +26,4 @@ jobs:
           find src -name "*.js" | xargs node --check
 
       - name: Package extension
-        run: npx @vscode/vsce package --allow-missing-repository
+        run: npx @vscode/vsce package
