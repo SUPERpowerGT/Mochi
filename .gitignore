@@ -27,6 +27,11 @@ out/
 dist/
 *.vsix
 
+# Media assets and docs (not needed in repo)
+media/
+README.md
+docs/
+
 # Mock / dev scripts (not for production)
 scripts/mock-sessions.json
 scripts/mock-*.json
