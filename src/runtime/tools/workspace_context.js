@@ -1,4 +1,7 @@
-const path = require("path");
+const {
+  normalizeRootPath,
+  resolvePathInsideRoot,
+} = require("../support/safe_paths");
 
 function requireWorkspaceRoot(getWorkspaceRoot) {
   const workspaceRoot = getWorkspaceRoot();
@@ -6,20 +9,11 @@ function requireWorkspaceRoot(getWorkspaceRoot) {
     throw new Error("No workspace folder is selected.");
   }
 
-  return path.resolve(workspaceRoot); // nosemgrep
+  return normalizeRootPath(workspaceRoot);
 }
 
 function resolveWorkspacePath(workspaceRoot, relativePath) {
-  const target = path.resolve(workspaceRoot, relativePath); // nosemgrep
-  const normalizedRoot = workspaceRoot.endsWith(path.sep)
-    ? workspaceRoot
-    : `${workspaceRoot}${path.sep}`;
-
-  if (target !== workspaceRoot && !target.startsWith(normalizedRoot)) {
-    throw new Error("Path must stay inside the active workspace folder.");
-  }
-
-  return target;
+  return resolvePathInsideRoot(workspaceRoot, relativePath, "workspace path");
 }
 
 module.exports = {

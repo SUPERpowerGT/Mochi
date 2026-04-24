@@ -1,7 +1,7 @@
 const fs = require("fs");
-const path = require("path");
 const { JsonFileStore } = require("./json_file_store");
 const { nowIso } = require("./memory_utils");
+const { normalizeRootPath, resolveChildFilename } = require("../support/safe_paths");
 
 async function readJsonIfPresent(filePath) {
   try {
@@ -26,6 +26,8 @@ async function detectWorkspaceFacts(workspaceRoot) {
     };
   }
 
+  const normalizedWorkspaceRoot = normalizeRootPath(workspaceRoot);
+
   const manifests = [];
   const languages = new Set();
   let packageManager = null;
@@ -34,7 +36,11 @@ async function detectWorkspaceFacts(workspaceRoot) {
   let packageJsonHasTypecheckScript = false;
   let testCommand = null;
 
-  const packageJsonPath = path.join(workspaceRoot, "package.json"); // nosemgrep
+  const packageJsonPath = resolveChildFilename(
+    normalizedWorkspaceRoot,
+    "package.json",
+    "workspace file"
+  );
   const packageJson = await readJsonIfPresent(packageJsonPath);
   if (packageJson) {
     manifests.push("package.json");
@@ -76,7 +82,11 @@ async function detectWorkspaceFacts(workspaceRoot) {
   ];
 
   for (const [filename, onFound] of fileChecks) {
-    const target = path.join(workspaceRoot, filename); // nosemgrep
+    const target = resolveChildFilename(
+      normalizedWorkspaceRoot,
+      filename,
+      "workspace file"
+    );
     try {
       await fs.promises.access(target);
       onFound();

@@ -1,12 +1,16 @@
 const fs = require("fs");
-const path = require("path");
+const {
+  normalizeRootPath,
+  assertSimpleFilename,
+  resolveChildFilename,
+} = require("../support/safe_paths");
 
 class JsonFileStore {
   constructor(options = {}) {
-    this.storageRoot = options.storageRoot;
-    this.filename = options.filename;
+    this.storageRoot = normalizeRootPath(options.storageRoot);
+    this.filename = assertSimpleFilename(options.filename, "store filename");
     this.defaultData = options.defaultData || {};
-    this.filePath = path.join(this.storageRoot, this.filename); // nosemgrep
+    this.filePath = resolveChildFilename(this.storageRoot, this.filename, "store filename");
     this.updateQueue = Promise.resolve();
   }
 
@@ -69,13 +73,18 @@ class JsonFileStore {
       Date.now(),
       Math.random().toString(16).slice(2),
     ].join(".");
-    return path.join(this.storageRoot, `${this.filename}.${uniquePart}.tmp`);
+    return resolveChildFilename(
+      this.storageRoot,
+      `${this.filename}.${uniquePart}.tmp`,
+      "temp filename"
+    );
   }
 
   async backupCorruptFile() {
-    const backupPath = path.join(
+    const backupPath = resolveChildFilename(
       this.storageRoot,
-      `${this.filename}.corrupt-${Date.now()}`
+      `${this.filename}.corrupt-${Date.now()}`,
+      "backup filename"
     );
 
     try {

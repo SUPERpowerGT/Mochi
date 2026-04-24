@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { assertSimpleFilename, resolveChildFilename } = require("./safe_paths");
 
 const SKILL_DIR = path.join(__dirname, "..", "skills");
 const DEFAULT_ROOT_LIMIT = 1800;
@@ -116,7 +117,11 @@ function loadSkills() {
   }
 
   cachedSkills = filenames
-    .map((filename) => parseSkill(filename, fs.readFileSync(path.join(SKILL_DIR, filename), "utf8"))) // nosemgrep
+    .map((filename) => {
+      const safeFilename = assertSimpleFilename(filename, "skill filename");
+      const skillPath = resolveChildFilename(SKILL_DIR, safeFilename, "skill filename");
+      return parseSkill(safeFilename, fs.readFileSync(skillPath, "utf8"));
+    })
     .filter(Boolean);
   return cachedSkills;
 }

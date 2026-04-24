@@ -1,5 +1,5 @@
 const fs = require("fs");
-const path = require("path");
+const { normalizeRootPath, resolvePathInsideRoot } = require("./safe_paths");
 
 const DEFAULT_INSTRUCTION_FILES = [
   "MOCHI.md",
@@ -30,12 +30,17 @@ function loadProjectInstructions(workspaceRoot, options = {}) {
     };
   }
 
+  const normalizedWorkspaceRoot = normalizeRootPath(workspaceRoot);
   const filenames = options.filenames || DEFAULT_INSTRUCTION_FILES;
   const sections = [];
   const sources = [];
 
   for (const relativePath of filenames) {
-    const absolutePath = path.join(workspaceRoot, relativePath); // nosemgrep
+    const absolutePath = resolvePathInsideRoot(
+      normalizedWorkspaceRoot,
+      relativePath,
+      "instruction path"
+    );
     const content = readIfFile(absolutePath);
     if (!content) {
       continue;
