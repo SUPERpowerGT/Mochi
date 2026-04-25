@@ -211,7 +211,8 @@ This is not a VS Code command-palette command, but it is still part of the local
 
 Path:
 
-- `./scripts/setup_model.sh`
+- `./scripts/setup_openai.js`
+- `./scripts/setup_openai.sh`
 
 What it does:
 
@@ -219,13 +220,19 @@ What it does:
 - writes OpenAI-compatible environment variables into `~/.openai-env`
 - keeps provider-specific keys in `MOCHI_OPENAI_API_KEY` and `GEMINI_API_KEY`, while `OPENAI_API_KEY` is the active SDK key for the selected provider
 - optionally writes proxy settings
-- ensures the shell loads the saved env file
+- the JavaScript helper works on Windows, macOS, and Linux
+- the shell helper can still update shell startup files on macOS and Linux
 
 Use:
 
 ```bash
-chmod +x ./scripts/setup_model.sh
-./scripts/setup_model.sh
+npm run setup:openai
+```
+
+Shell-only alternative for macOS or Linux:
+
+```bash
+./scripts/setup_openai.sh
 ```
 
 ## Which Path To Use

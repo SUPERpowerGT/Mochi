@@ -53,17 +53,7 @@ export OPENAI_MODEL="gpt-4.1-mini"
 export OPENAI_API_FORMAT="chat_completions"
 ```
 
-For Gemini, the active SDK key is still written to `OPENAI_API_KEY` because Mochi uses an OpenAI-compatible client. Provider-specific keys are kept separately so switching does not mix credentials:
-
-```bash
-export MOCHI_MODEL_PROVIDER="gemini"
-export OPENAI_API_KEY="AIza..."
-export OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-export OPENAI_MODEL="gemini-2.5-flash"
-export OPENAI_API_FORMAT="chat_completions"
-export MOCHI_OPENAI_API_KEY="sk-..."
-export GEMINI_API_KEY="AIza..."
-```
+The runtime also accepts plain `.env`-style lines such as `OPENAI_API_KEY="sk-..."`, which makes the same file work on Windows, macOS, and Linux.
 
 ## Quick Start
 
@@ -76,13 +66,15 @@ npm install
 Configure model credentials:
 
 ```bash
-chmod +x ./scripts/setup_model.sh
-./scripts/setup_model.sh
+npm run setup:openai
 ```
 
-The setup script asks for provider, API key, model, optional shell integration, and optional proxy settings. Mochi reads `~/.openai-env` directly at runtime, so most users can accept the defaults and start the extension after setup.
+Alternative setup helpers:
 
-To switch between OpenAI and Gemini later, run `./scripts/setup_model.sh` again and choose the other provider. The script keeps provider-specific keys separately and rewrites the active OpenAI-compatible runtime variables.
+- Windows, macOS, Linux: `node ./scripts/setup_openai.js`
+- macOS, Linux shells only: `./scripts/setup_openai.sh`
+
+If you do not need a local proxy, choose `n` when the setup script asks about proxy configuration. Mochi reads `~/.openai-env` directly at runtime. On Windows you usually only need to restart the Extension Development Host after setup; no `source` step is required.
 
 Start the VS Code extension:
 

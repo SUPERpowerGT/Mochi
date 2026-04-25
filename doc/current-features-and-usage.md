@@ -163,11 +163,10 @@ This helps repo-specific guidance live with the codebase instead of being re-exp
 ### 1. Configure Model Provider
 
 ```bash
-chmod +x ./scripts/setup_model.sh
-./scripts/setup_model.sh
+npm run setup:openai
 ```
 
-The setup script can configure either OpenAI or Gemini through an OpenAI-compatible endpoint. If you do not use a proxy, choose `n` when asked to configure proxy settings. When setup completes, run the `source ...` command printed by the script so the new environment is available in your current shell.
+This setup path works on Windows, macOS, and Linux. If you do not use a proxy, choose `n` when asked to configure proxy settings. Mochi reads `~/.openai-env` directly at runtime, so Windows users can usually just restart the Extension Development Host after setup.
 
 ### 2. Install JavaScript Runtime Dependencies
 

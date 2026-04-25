@@ -9,7 +9,6 @@ function loadOpenAIEnvFile({ override = true } = {}) {
     return;
   }
 
-  const pattern = /^export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
   const lines = fs.readFileSync(OPENAI_ENV_FILE, "utf8").split(/\r?\n/);
 
   for (const rawLine of lines) {
@@ -18,12 +17,12 @@ function loadOpenAIEnvFile({ override = true } = {}) {
       continue;
     }
 
-    const match = line.match(pattern);
-    if (!match) {
+    const assignment = parseEnvAssignment(line);
+    if (!assignment) {
       continue;
     }
 
-    const [, key, rawValue] = match;
+    const { key, rawValue } = assignment;
     let value = rawValue.trim();
 
     if (
@@ -38,6 +37,26 @@ function loadOpenAIEnvFile({ override = true } = {}) {
       process.env[key] = value;
     }
   }
+}
+
+function parseEnvAssignment(line) {
+  const powershellMatch = line.match(/^\$env:([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/i);
+  if (powershellMatch) {
+    return {
+      key: powershellMatch[1],
+      rawValue: powershellMatch[2],
+    };
+  }
+
+  const shellMatch = line.match(/^(?:export\s+|set\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/i);
+  if (shellMatch) {
+    return {
+      key: shellMatch[1],
+      rawValue: shellMatch[2],
+    };
+  }
+
+  return null;
 }
 
 module.exports = {

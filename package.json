@@ -6,6 +6,9 @@
   "publisher": "local",
   "license": "MIT",
   "type": "commonjs",
+  "scripts": {
+    "setup:openai": "node ./scripts/setup_openai.js"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
