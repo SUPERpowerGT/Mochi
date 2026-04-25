@@ -160,7 +160,7 @@ This helps repo-specific guidance live with the codebase instead of being re-exp
 
 ## Current Setup
 
-### 1. Configure OpenAI
+### 1. Configure Model Provider
 
 ```bash
 npm run setup:openai
@@ -206,7 +206,7 @@ This installs:
 For normal development and testing:
 
 1. use the VS Code extension path
-2. use the setup script only for OpenAI environment configuration
+2. use the setup script only for local model provider configuration
 
 ## What Changed Recently
 

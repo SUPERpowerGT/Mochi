@@ -9,6 +9,16 @@ Mochi is an experimental VS Code extension that brings an OpenAI Agents SDK runt
 
 The project is intentionally local-first. Runtime state, memory, and traces are stored on your machine, while workspace tools operate only against the selected local folder.
 
+## Demo
+
+
+https://github.com/user-attachments/assets/01e88781-2600-4f24-8cb4-a177271787ab
+
+
+<video src="media/video-demo.mp4" controls width="720"></video>
+
+If the video does not render in your Markdown viewer, open `media/video-demo.mp4` directly.
+
 ## Features
 
 - Editor-native chat panel with streamed assistant replies.
@@ -30,12 +40,14 @@ The project is intentionally local-first. Runtime state, memory, and traces are 
 
 - VS Code `1.90.0` or newer.
 - Node.js and npm.
-- An OpenAI API key.
+- An OpenAI API key or a Google AI Studio Gemini API key.
 
-Mochi reads OpenAI configuration from your shell environment or from `~/.openai-env`:
+Mochi reads model provider configuration from your shell environment or from `~/.openai-env`. The setup script supports OpenAI and Gemini through an OpenAI-compatible endpoint:
 
 ```bash
+export MOCHI_MODEL_PROVIDER="openai"
 export OPENAI_API_KEY="sk-..."
+export MOCHI_OPENAI_API_KEY="sk-..."
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 export OPENAI_MODEL="gpt-4.1-mini"
 export OPENAI_API_FORMAT="chat_completions"
@@ -51,7 +63,7 @@ Install JavaScript dependencies:
 npm install
 ```
 
-Configure OpenAI credentials:
+Configure model credentials:
 
 ```bash
 npm run setup:openai
@@ -125,7 +137,7 @@ This makes the extension useful for real local work while keeping potentially su
 ```text
 src/extension/   VS Code activation, commands, webview UI, and chat controller
 src/runtime/     OpenAI Agents SDK runtime, tools, prompts, memory, and tracing
-scripts/         OpenAI environment setup helper
+scripts/         Model provider setup helper
 doc/             Architecture notes, feature notes, roadmap, and command reference
 media/           Extension and README assets
 ```

@@ -78,9 +78,23 @@ class SessionStore {
   }
 
   async compactHistoryIfNeeded(sessionId) {
-    return this.updateSession(sessionId, (session) => {
-      compactSessionHistory(session, this.compactionPolicy);
+    let compactionResult = null;
+    const data = await this.store.update((current) => {
+      const session = current.sessions[sessionId];
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+
+      compactionResult = compactSessionHistory(session, this.compactionPolicy);
+      this.normalizeSession(session);
+      session.updatedAt = nowIso();
+      return current;
     });
+
+    return {
+      ...(compactionResult || { changed: false }),
+      session: data.sessions[sessionId],
+    };
   }
 
   async setLastTurn(sessionId, lastTurn) {
@@ -92,6 +106,37 @@ class SessionStore {
   async setLastRunTrace(sessionId, lastRunTrace) {
     return this.updateSession(sessionId, (session) => {
       session.lastRunTrace = lastRunTrace || null;
+    });
+  }
+
+  async applyMemoryMaintenance(sessionId, maintenance) {
+    return this.updateSession(sessionId, (session) => {
+      if (!maintenance || typeof maintenance !== "object") {
+        return;
+      }
+
+      if (typeof maintenance.rewriteSummary === "string" && maintenance.rewriteSummary.trim()) {
+        session.summary = maintenance.rewriteSummary.trim();
+        session.summaryUpdatedAt = nowIso();
+      }
+
+      const previousCompaction = session.compaction && typeof session.compaction === "object"
+        ? session.compaction
+        : {};
+
+      session.compaction = {
+        ...previousCompaction,
+        maintenance: {
+          maintainedAt: nowIso(),
+          removedClaims: Array.isArray(maintenance.removedClaims)
+            ? maintenance.removedClaims.slice(0, 12)
+            : [],
+          keptFocus: Array.isArray(maintenance.keptFocus)
+            ? maintenance.keptFocus.slice(0, 12)
+            : [],
+          notes: typeof maintenance.notes === "string" ? maintenance.notes : "",
+        },
+      };
     });
   }
 

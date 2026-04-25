@@ -207,7 +207,7 @@ Capability:
 
 This is not a VS Code command-palette command, but it is still part of the local setup flow.
 
-### OpenAI Setup Script
+### Model Provider Setup Script
 
 Path:
 
@@ -216,8 +216,9 @@ Path:
 
 What it does:
 
-- configures `OPENAI_API_KEY`
-- writes OpenAI environment variables into `~/.openai-env`
+- configures OpenAI or Gemini credentials
+- writes OpenAI-compatible environment variables into `~/.openai-env`
+- keeps provider-specific keys in `MOCHI_OPENAI_API_KEY` and `GEMINI_API_KEY`, while `OPENAI_API_KEY` is the active SDK key for the selected provider
 - optionally writes proxy settings
 - the JavaScript helper works on Windows, macOS, and Linux
 - the shell helper can still update shell startup files on macOS and Linux
@@ -243,7 +244,7 @@ Use the VS Code extension commands for normal product usage and testing.
 ## Notes
 
 - the VS Code extension is the main runtime path
-- the setup script exists only for local OpenAI environment configuration
+- the setup script exists only for local model provider environment configuration
 - the OpenAI Agents SDK is already in active use for the JavaScript runtime, but Mochi still owns product-specific layers such as workspace tools, task routing, workspace memory, and user memory
 - conversation turns and work-item turns are now treated differently inside the memory system
 - repo-level instruction files like `AGENTS.md` and `CLAUDE.md` are now part of Mochi's runtime context when present

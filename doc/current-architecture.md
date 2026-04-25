@@ -431,7 +431,7 @@ This is acceptable for the current local extension phase.
 - the project does not yet use the OpenAI SDK session abstraction as its primary persisted session layer
 - destructive approval currently covers file deletion and file clearing, but it is not yet a broader action approval framework
 - the current budgeting layer uses character budgets rather than token-accurate budgeting
-- `scripts/setup_openai.sh` remains as the only setup helper; the JavaScript runtime is the only maintained product runtime
+- `scripts/setup_model.sh` remains as the primary setup helper; the JavaScript runtime is the only maintained product runtime
 
 ## Architectural Direction
 

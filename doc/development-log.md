@@ -15,7 +15,7 @@ Initial project goals:
 
 Key files introduced in the early structure:
 
-- `scripts/setup_openai.sh`
+- `scripts/setup_model.sh`
 - `scripts/openai_api.sh`
 - `scripts/agent_llm.sh`
 - `src/agent/minimal_agent.py`
@@ -818,7 +818,7 @@ As of this log:
 
 - the VS Code extension runs on the OpenAI Agents SDK path
 - the JavaScript runtime is the only maintained product runtime
-- `scripts/setup_openai.sh` remains useful for OpenAI environment setup
+- `scripts/setup_model.sh` remains useful for model provider environment setup
 - the codebase now has a long-term structure for tools, prompts, agents, and memory
 
 ## Phase 43: Rolling Session Compaction
@@ -914,6 +914,24 @@ Follow-up chat rendering update:
 - assistant bubbles now render common Markdown instead of showing raw Markdown characters
 - the renderer escapes HTML before formatting, keeps user messages as plain text, and supports headings, lists, code blocks, inline code, links, quotes, and separators
 - streamed replies still appear as plain accumulating text while streaming, then render as Markdown when finalized
+
+## Phase 45: OpenAI-Compatible Provider Setup
+
+The setup helper now supports choosing between OpenAI and Gemini without changing Mochi's main runtime path.
+
+What changed:
+
+- `scripts/setup_model.sh` now starts with a provider choice
+- OpenAI keeps the default `https://api.openai.com/v1` endpoint and `gpt-4.1-mini` model
+- Gemini writes a Google AI Studio key into the OpenAI-compatible environment variables used by the Node SDK
+- Gemini setup also stores `GEMINI_API_KEY` for clarity while keeping `OPENAI_API_KEY` for SDK compatibility
+- README and usage docs now describe the script as model provider setup rather than OpenAI-only setup
+
+Why it matters:
+
+- users can try Gemini through the same VS Code extension flow
+- the runtime stays simple because provider switching is handled through environment configuration
+- the setup prompt is clearer for first-time users and avoids mixing OpenAI and Gemini keys
 
 ## Next Likely Steps
 

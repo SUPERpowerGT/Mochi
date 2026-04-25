@@ -339,7 +339,7 @@ class MemoryManager {
 
   async finalizeRun({ sessionId, taskId, taskPlan, prompt, reply, history, trace }) {
     await this.sessionStore.setHistory(sessionId, history, prompt);
-    await this.sessionStore.compactHistoryIfNeeded(sessionId);
+    const compactionResult = await this.sessionStore.compactHistoryIfNeeded(sessionId);
     await this.sessionStore.setLastRunTrace(sessionId, trace || null);
     if (taskPlan) {
       const committedTask = await this.taskStore.commitPlannedTask(taskPlan, {
@@ -366,10 +366,41 @@ class MemoryManager {
         sessionId,
       });
     }
+
+    if (compactionResult && compactionResult.changed && compactionResult.session) {
+      const representativeTask = await this.findRepresentativeTaskForSession(compactionResult.session);
+      return {
+        maintenanceCandidate: {
+          sessionId,
+          sessionSummary: compactionResult.session.summary || "",
+          sessionCompaction: compactionResult.session.compaction || null,
+          compactedAt: compactionResult.session.compactedAt || null,
+          lastRunTraceSummary: trace ? summarizeRunTrace(trace) : null,
+          task: representativeTask
+            ? {
+                id: representativeTask.id,
+                title: representativeTask.title || "",
+                status: representativeTask.status || "",
+                summary: representativeTask.summary || "",
+                goal: representativeTask.goal || "",
+                updatedAt: representativeTask.updatedAt || null,
+              }
+            : null,
+        },
+      };
+    }
+
+    return {
+      maintenanceCandidate: null,
+    };
   }
 
   async recordRunTrace(sessionId, trace) {
     await this.sessionStore.setLastRunTrace(sessionId, trace || null);
+  }
+
+  async applyMemoryMaintenance(sessionId, maintenance) {
+    return this.sessionStore.applyMemoryMaintenance(sessionId, maintenance);
   }
 
   composeMemoryText({
