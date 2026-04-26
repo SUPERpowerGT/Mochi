@@ -29,6 +29,7 @@ The project currently provides:
 - progressively streamed assistant reply text in the chat window while the final answer is being generated
 - a cleaner chat UI with lightweight thinking state, minimal header chrome, and less intrusive approval prompts
 - shell setup helper
+- local multi-user and multi-device profile switching with summary-level cross-device continuity when the identity API is available
 
 ## Current User-Facing Features
 

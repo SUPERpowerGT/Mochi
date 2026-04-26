@@ -8,8 +8,15 @@ const { classifyTurn } = require("./turn_classifier");
 const { loadProjectInstructions } = require("../support/project_instructions");
 const { summarizeRunTrace } = require("../support/trace_summary");
 const {
+  DEFAULT_IDENTITY,
+  normalizeIdentity,
+  createIdentityStorageRoot,
+} = require("../support/runtime_identity");
+const { SessionSyncClient } = require("../support/session_sync_client");
+const {
   createSessionId,
   createWorkspaceId,
+  createWorkspaceSyncKey,
   detectPreferredLanguage,
   isMemoryRecallPrompt,
 } = require("./memory_utils");
@@ -27,9 +34,20 @@ class MemoryManager {
     this.getWorkspaceRoot = options.getWorkspaceRoot || (() => "");
     this.baseSessionId = options.baseSessionId || "primary-chat";
     this.compactionPolicy = options.compactionPolicy || {};
-    this.storageRoot =
+    this.baseStorageRoot =
       options.storageRoot ||
       path.join(os.homedir(), ".mochi", "memory");
+    this.currentIdentity = normalizeIdentity(options.currentIdentity || DEFAULT_IDENTITY);
+    this.sessionSyncClient = options.sessionSyncClient || new SessionSyncClient({
+      baseUrl: options.sessionSyncBaseUrl,
+      authToken: options.sessionSyncAuthToken,
+    });
+    this.hydratedSessionIds = new Set();
+    this.storageRoot = createIdentityStorageRoot(this.baseStorageRoot, this.currentIdentity);
+    this.initializeStores();
+  }
+
+  initializeStores() {
     this.sessionStore = new SessionStore({
       storageRoot: this.storageRoot,
       compactionPolicy: this.compactionPolicy,
@@ -47,11 +65,38 @@ class MemoryManager {
     return this.baseSessionId;
   }
 
+  setIdentity(identity) {
+    this.currentIdentity = normalizeIdentity(identity || this.currentIdentity || DEFAULT_IDENTITY);
+    this.storageRoot = createIdentityStorageRoot(this.baseStorageRoot, this.currentIdentity);
+    this.hydratedSessionIds.clear();
+    this.initializeStores();
+  }
+
+  getIdentity() {
+    return this.currentIdentity;
+  }
+
+  setSessionSyncAuthToken(token) {
+    if (this.sessionSyncClient && this.sessionSyncClient.setAuthToken) {
+      this.sessionSyncClient.setAuthToken(token);
+    }
+  }
+
   async ensureCurrentSession() {
     const workspaceRoot = this.getWorkspaceRoot();
     const workspaceId = createWorkspaceId(workspaceRoot);
     const sessionId = createSessionId(this.baseSessionId, workspaceId);
-    return this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    const session = await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    const workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    await this.hydrateSessionFromSyncIfNeeded({
+      sessionId,
+      baseSessionId: this.baseSessionId,
+      workspaceId,
+      workspaceRoot,
+      session,
+      workspace,
+    });
+    return this.sessionStore.getSession(sessionId);
   }
 
   async prepareRun(prompt, options = {}) {
@@ -60,8 +105,18 @@ class MemoryManager {
     const baseSessionId = options.baseSessionId || this.baseSessionId;
     const sessionId = createSessionId(baseSessionId, workspaceId);
 
-    const session = await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
-    const workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    let session = await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    let workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    await this.hydrateSessionFromSyncIfNeeded({
+      sessionId,
+      baseSessionId,
+      workspaceId,
+      workspaceRoot,
+      session,
+      workspace,
+    });
+    session = await this.sessionStore.getSession(sessionId);
+    workspace = await this.workspaceStore.getWorkspace(workspaceId);
     const projectInstructions = loadProjectInstructions(workspaceRoot);
     const focusedTaskId =
       session && (session.focusedTaskId || session.activeTaskId)
@@ -175,6 +230,7 @@ class MemoryManager {
     return {
       generatedAt: new Date().toISOString(),
       baseSessionId: this.baseSessionId,
+      identity: this.currentIdentity,
       storageRoot: this.storageRoot,
       workspaceRoot,
       workspaceId,
@@ -367,6 +423,21 @@ class MemoryManager {
       });
     }
 
+    await this.uploadSessionSyncSnapshot({
+      sessionId,
+      workspaceId: extractWorkspaceIdFromSessionId(sessionId),
+      baseSessionId: extractBaseSessionId(sessionId, extractWorkspaceIdFromSessionId(sessionId)),
+      trace,
+    });
+    await this.uploadChangeSummary({
+      sessionId,
+      workspaceId: extractWorkspaceIdFromSessionId(sessionId),
+      baseSessionId: extractBaseSessionId(sessionId, extractWorkspaceIdFromSessionId(sessionId)),
+      prompt,
+      reply,
+      trace,
+    });
+
     if (compactionResult && compactionResult.changed && compactionResult.session) {
       const representativeTask = await this.findRepresentativeTaskForSession(compactionResult.session);
       return {
@@ -397,6 +468,306 @@ class MemoryManager {
 
   async recordRunTrace(sessionId, trace) {
     await this.sessionStore.setLastRunTrace(sessionId, trace || null);
+  }
+
+  async hydrateSessionFromSyncIfNeeded({ sessionId, baseSessionId, workspaceId, workspaceRoot, session, workspace }) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
+      return;
+    }
+    if (this.hydratedSessionIds.has(sessionId)) {
+      return;
+    }
+    if (!shouldHydrateFromSync(session)) {
+      this.hydratedSessionIds.add(sessionId);
+      return;
+    }
+
+    const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
+
+    try {
+      const snapshot = await this.sessionSyncClient.fetchLatestSnapshot({
+        tenantId: this.currentIdentity.tenantId,
+        userId: this.currentIdentity.userId,
+        workspaceKey,
+      });
+      if (!snapshot) {
+        this.hydratedSessionIds.add(sessionId);
+        return;
+      }
+
+      await this.sessionStore.applySyncedSession(sessionId, {
+        workspaceId,
+        summary: snapshot.sessionSummary || "",
+        summaryUpdatedAt: snapshot.syncedAt || null,
+        lastPrompt: snapshot.lastPrompt || "",
+        lastTurn: snapshot.lastTurn || null,
+        lastRunTrace: snapshot.lastRunTrace || null,
+        messageCount: snapshot.messageCount || 0,
+      });
+
+      if (snapshot.task) {
+        const syncedTask = await this.taskStore.upsertSyncedTask({
+          sessionId,
+          workspaceId,
+          task: snapshot.task,
+        });
+        if (syncedTask) {
+          await this.sessionStore.updateSession(sessionId, (targetSession) => {
+            targetSession.activeTaskId = syncedTask.id;
+            targetSession.focusedTaskId = syncedTask.id;
+            if (targetSession.lastTurn && !targetSession.lastTurn.linkedTaskId) {
+              targetSession.lastTurn.linkedTaskId = syncedTask.id;
+            }
+          });
+        }
+      }
+
+      if (snapshot.preferences) {
+        await this.userStore.applyPreferences(snapshot.preferences);
+      }
+
+      if (snapshot.workspace) {
+        await this.workspaceStore.applySyncedWorkspace(workspaceId, workspaceRoot, snapshot.workspace);
+      }
+    } catch (error) {
+      // Session sync should not block local use.
+    } finally {
+      this.hydratedSessionIds.add(sessionId);
+    }
+  }
+
+  async uploadSessionSyncSnapshot({ sessionId, workspaceId, baseSessionId, trace }) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
+      return;
+    }
+
+    const workspaceRoot = this.getWorkspaceRoot();
+    const session = await this.sessionStore.getSession(sessionId);
+    const task = session && (session.focusedTaskId || session.activeTaskId)
+      ? await this.taskStore.getTask(session.focusedTaskId || session.activeTaskId)
+      : await this.findRepresentativeTaskForSession(session);
+    const workspace = await this.workspaceStore.getWorkspace(workspaceId);
+    const preferences = await this.userStore.getPreferences();
+    const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
+    const traceSummary = trace ? summarizeRunTrace(trace) : summarizeRunTrace(session && session.lastRunTrace ? session.lastRunTrace : null);
+
+    const payload = {
+      tenantId: this.currentIdentity.tenantId,
+      userId: this.currentIdentity.userId,
+      deviceId: this.currentIdentity.deviceId,
+      workspaceKey,
+      workspaceLabel: workspace && workspace.detected && workspace.detected.projectName
+        ? workspace.detected.projectName
+        : workspaceRoot,
+      baseSessionId,
+      syncedAt: new Date().toISOString(),
+      sessionSummary: buildSessionSyncSummary({ session, task, traceSummary }),
+      lastPrompt: session && session.lastPrompt ? session.lastPrompt : "",
+      lastTurn: session && session.lastTurn ? session.lastTurn : null,
+      messageCount: session && typeof session.messageCount === "number" ? session.messageCount : 0,
+      lastRunTrace: traceSummary,
+      task: task
+        ? {
+            id: task.id,
+            title: task.title || "",
+            goal: task.goal || "",
+            status: task.status || "",
+            summary: task.summary || "",
+            lastOutcome: task.lastOutcome || "",
+            turnCount: task.turnCount || 0,
+            lastUserPrompt: task.lastUserPrompt || "",
+            latestAssistantReply: task.latestAssistantReply || "",
+            updatedAt: task.updatedAt || null,
+          }
+        : null,
+      preferences,
+      workspace: workspace
+        ? {
+            detected: workspace.detected || null,
+            notes: Array.isArray(workspace.notes) ? workspace.notes : [],
+          }
+        : null,
+    };
+
+    try {
+      await this.sessionSyncClient.uploadSnapshot(payload);
+    } catch (error) {
+      // Session sync should not block local use.
+    }
+  }
+
+  async uploadChangeSummary({ sessionId, workspaceId, baseSessionId, prompt, reply, trace }) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
+      return;
+    }
+
+    const workspaceRoot = this.getWorkspaceRoot();
+    const session = await this.sessionStore.getSession(sessionId);
+    const task = session && (session.focusedTaskId || session.activeTaskId)
+      ? await this.taskStore.getTask(session.focusedTaskId || session.activeTaskId)
+      : await this.findRepresentativeTaskForSession(session);
+    const workspace = await this.workspaceStore.getWorkspace(workspaceId);
+    const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
+    const traceSummary = trace ? summarizeRunTrace(trace) : summarizeRunTrace(session && session.lastRunTrace ? session.lastRunTrace : null);
+    const changedPaths = traceSummary && Array.isArray(traceSummary.changedPaths)
+      ? traceSummary.changedPaths
+      : [];
+
+    if (!changedPaths.length && !(task && task.summary) && !(reply && reply.trim())) {
+      return;
+    }
+
+    const summaryParts = [];
+    if (task && task.title) {
+      summaryParts.push(`task: ${task.title}`);
+    }
+    if (task && task.summary) {
+      summaryParts.push(task.summary);
+    }
+    if (traceSummary && traceSummary.outcome) {
+      summaryParts.push(traceSummary.outcome);
+    }
+    if (changedPaths.length) {
+      summaryParts.push(`changed files: ${changedPaths.slice(0, 6).join(", ")}`);
+    }
+    if (!summaryParts.length && reply) {
+      summaryParts.push(String(reply).trim().slice(0, 280));
+    }
+
+    const payload = {
+      tenantId: this.currentIdentity.tenantId,
+      userId: this.currentIdentity.userId,
+      deviceId: this.currentIdentity.deviceId,
+      workspaceKey,
+      workspaceLabel: workspace && workspace.detected && workspace.detected.projectName
+        ? workspace.detected.projectName
+        : workspaceRoot,
+      baseSessionId,
+      prompt: String(prompt || "").slice(0, 1200),
+      summary: summaryParts.join("; ").slice(0, 1600),
+      changedPaths,
+      verificationStatus: traceSummary && traceSummary.verification && traceSummary.verification.status
+        ? traceSummary.verification.status
+        : "unknown",
+      traceStatus: traceSummary && traceSummary.status ? traceSummary.status : "unknown",
+      payload: {
+        replyPreview: String(reply || "").slice(0, 500),
+        task: task
+          ? {
+              id: task.id,
+              title: task.title || "",
+              summary: task.summary || "",
+              status: task.status || "",
+              updatedAt: task.updatedAt || null,
+            }
+          : null,
+        traceSummary,
+      },
+    };
+
+    try {
+      await this.sessionSyncClient.uploadChangeSummary(payload);
+    } catch (error) {
+      // Change summary sync should not block local use.
+    }
+  }
+
+  async listRestoreCheckpoints({ limit = 10 } = {}) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
+      return [];
+    }
+
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
+
+    try {
+      return await this.sessionSyncClient.listRestoreCheckpoints({
+        tenantId: this.currentIdentity.tenantId,
+        userId: this.currentIdentity.userId,
+        workspaceKey,
+        limit,
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async restoreCheckpoint(checkpointId) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled || !checkpointId) {
+      return null;
+    }
+
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
+
+    let checkpoint = null;
+    try {
+      checkpoint = await this.sessionSyncClient.fetchRestoreCheckpoint({
+        checkpointId,
+        tenantId: this.currentIdentity.tenantId,
+        userId: this.currentIdentity.userId,
+        workspaceKey,
+      });
+    } catch (error) {
+      return null;
+    }
+
+    if (!checkpoint) {
+      return null;
+    }
+
+    const payload = checkpoint.payload && typeof checkpoint.payload === "object"
+      ? checkpoint.payload
+      : {};
+    const baseSessionId = checkpoint.baseSessionId || this.baseSessionId;
+    const sessionId = createSessionId(baseSessionId, workspaceId);
+    await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    await this.sessionStore.applySyncedSession(sessionId, {
+      workspaceId,
+      summary: payload.sessionSummary || checkpoint.summary || "",
+      summaryUpdatedAt: checkpoint.createdAt || new Date().toISOString(),
+      lastPrompt: payload.lastPrompt || "",
+      lastTurn: payload.lastTurn || null,
+      lastRunTrace: payload.lastRunTrace || null,
+      messageCount: payload.messageCount || 0,
+    });
+
+    if (payload.task) {
+      const syncedTask = await this.taskStore.upsertSyncedTask({
+        sessionId,
+        workspaceId,
+        task: payload.task,
+      });
+      if (syncedTask) {
+        await this.sessionStore.updateSession(sessionId, (targetSession) => {
+          targetSession.activeTaskId = syncedTask.id;
+          targetSession.focusedTaskId = syncedTask.id;
+          if (targetSession.lastTurn && !targetSession.lastTurn.linkedTaskId) {
+            targetSession.lastTurn.linkedTaskId = syncedTask.id;
+          }
+        });
+      }
+    }
+
+    if (payload.preferences) {
+      await this.userStore.applyPreferences(payload.preferences);
+    }
+
+    if (payload.workspace) {
+      await this.workspaceStore.applySyncedWorkspace(workspaceId, workspaceRoot, payload.workspace);
+    }
+
+    this.hydratedSessionIds.add(sessionId);
+
+    return {
+      checkpoint,
+      baseSessionId,
+      sessionId,
+    };
   }
 
   async applyMemoryMaintenance(sessionId, maintenance) {
@@ -643,6 +1014,46 @@ function extractBaseSessionId(sessionId, workspaceId) {
     return sessionId.slice(0, -suffix.length);
   }
   return sessionId || "";
+}
+
+function extractWorkspaceIdFromSessionId(sessionId) {
+  const text = String(sessionId || "");
+  const marker = ":workspace:";
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex < 0) {
+    return "no-workspace";
+  }
+  return text.slice(markerIndex + 1);
+}
+
+function shouldHydrateFromSync(session) {
+  if (!session || typeof session !== "object") {
+    return true;
+  }
+
+  const history = Array.isArray(session.history) ? session.history : [];
+  return !history.length && !session.summary && !session.lastPrompt && !session.lastRunTrace;
+}
+
+function buildSessionSyncSummary({ session, task, traceSummary }) {
+  if (session && session.summary) {
+    return session.summary;
+  }
+
+  const parts = [];
+  if (session && session.lastPrompt) {
+    parts.push(`last user request: ${session.lastPrompt}`);
+  }
+  if (task && task.summary) {
+    parts.push(`task summary: ${task.summary}`);
+  } else if (task && task.lastOutcome) {
+    parts.push(`task outcome: ${task.lastOutcome}`);
+  }
+  if (traceSummary && traceSummary.outcome) {
+    parts.push(`latest run: ${traceSummary.outcome}`);
+  }
+
+  return parts.join("; ");
 }
 
 function createSessionTitle(session) {

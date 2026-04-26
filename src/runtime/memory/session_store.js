@@ -109,6 +109,28 @@ class SessionStore {
     });
   }
 
+  async applySyncedSession(sessionId, syncedSession = {}) {
+    await this.getOrCreateSession(sessionId, syncedSession.workspaceId || "no-workspace");
+    return this.updateSession(sessionId, (session) => {
+      if (typeof syncedSession.summary === "string") {
+        session.summary = syncedSession.summary;
+        session.summaryUpdatedAt = syncedSession.summaryUpdatedAt || nowIso();
+      }
+      if (typeof syncedSession.lastPrompt === "string") {
+        session.lastPrompt = syncedSession.lastPrompt;
+      }
+      if (syncedSession.lastTurn && typeof syncedSession.lastTurn === "object") {
+        session.lastTurn = syncedSession.lastTurn;
+      }
+      if (syncedSession.lastRunTrace && typeof syncedSession.lastRunTrace === "object") {
+        session.lastRunTrace = syncedSession.lastRunTrace;
+      }
+      if (typeof syncedSession.messageCount === "number") {
+        session.messageCount = syncedSession.messageCount;
+      }
+    });
+  }
+
   async applyMemoryMaintenance(sessionId, maintenance) {
     return this.updateSession(sessionId, (session) => {
       if (!maintenance || typeof maintenance !== "object") {
