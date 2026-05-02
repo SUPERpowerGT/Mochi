@@ -1,8 +1,12 @@
 <div align="center">
-  <img src="media/mochi_logo_readme.svg" alt="Mochi logo" width="132" />
   <h1><code>MOCHI</code></h1>
   <p><code>local-first · multi-agent · memory-aware</code></p>
-  <p><strong>A local-first VS Code coding agent with workspace tools, session memory, and approval-aware file edits.</strong></p>
+  <p><strong>A local-first AI coding agent for VS Code with workspace tools, session memory, and approval-aware edits.</strong></p>
+  <p>
+    <a href="https://marketplace.visualstudio.com/items?itemName=zee.mochi-local-agent">VS Code Marketplace</a>
+    ·
+    <a href="https://github.com/SUPERpowerGT/Mochi">GitHub</a>
+  </p>
 </div>
 
 Mochi is an experimental VS Code extension that brings an OpenAI Agents SDK runtime into a local editor chat panel. It can inspect your workspace, reason over the active editor context, edit files, run approved commands, and preserve lightweight memory across sessions.
@@ -26,11 +30,13 @@ If the video does not render in your Markdown viewer, open `media/video-demo.mp4
 - Workspace tools for listing files, reading files, writing files, creating directories, and applying focused edits.
 - Command execution with explicit in-chat approval before running local commands.
 - Approval cards for destructive actions such as deleting files, deleting directories, or clearing existing file content.
-- Session and task memory for continuing work across turns without treating every message as a new task.
+- Current-window memory for continuing work across turns without treating every message as a new durable fact.
 - Rolling session summaries that compact older history while keeping recent turns available for context.
 - Workspace memory that records detected project facts and suggested verification commands.
 - Project instruction loading from `MOCHI.md`, `AGENTS.md`, and `CLAUDE.md` style files when present.
 - Memory snapshots and run traces for debugging what Mochi remembered, which tools ran, and what changed.
+- Memory controls for viewing local memory, private current-window mode, isolating a window from other sessions, disabling persistent memory reads, and clearing current or all local memory.
+- Private mode is exposed directly in the chat panel as a current-window toggle; the slash menu stays small and only exposes high-frequency shortcuts.
 - Root-agent orchestration with delegated subagents for repository guidance, coding, plan review, and code review.
 - Role-specific tool permissions so exploratory and review agents stay read-only while the coding agent can edit.
 - Lightweight local skills that inject task-specific workflow guidance only when relevant.
@@ -39,10 +45,18 @@ If the video does not render in your Markdown viewer, open `media/video-demo.mp4
 ## Requirements
 
 - VS Code `1.90.0` or newer.
-- Node.js and npm.
 - An OpenAI API key or a Google AI Studio Gemini API key.
+- Node.js and npm for local development from source.
 
-Mochi reads model provider configuration from your shell environment or from `~/.openai-env`. The setup script supports OpenAI and Gemini through an OpenAI-compatible endpoint:
+Marketplace users can configure model credentials from VS Code:
+
+```text
+Mochi: Configure Model Credentials
+```
+
+Mochi stores the API key in VS Code Secret Storage and stores non-sensitive model settings in VS Code Settings.
+
+For local development or advanced setup, Mochi can also read model provider configuration from your shell environment or from `~/.openai-env`. The setup script supports OpenAI and Gemini through an OpenAI-compatible endpoint:
 
 ```bash
 export MOCHI_MODEL_PROVIDER="openai"
@@ -57,26 +71,46 @@ The runtime also accepts plain `.env`-style lines such as `OPENAI_API_KEY="sk-..
 
 ## Quick Start
 
-Install JavaScript dependencies:
+Install Mochi from the VS Code Marketplace:
+
+```text
+https://marketplace.visualstudio.com/items?itemName=zee.mochi-local-agent
+```
+
+Configure model credentials:
+
+```text
+Mochi: Configure Model Credentials
+```
+
+If you open Mochi before configuring credentials, it will prompt you to configure them. If you try to send a message without an API key, Mochi will show the same configuration prompt again.
+
+Then open the Command Palette in VS Code and run:
+
+```text
+Local Agent: Open Chat
+```
+
+For local development, install JavaScript dependencies:
 
 ```bash
 npm install
 ```
 
-Configure model credentials:
+Then configure credentials and start the Extension Development Host:
 
 ```bash
-npm run setup:openai
+npm run setup:model
 ```
 
 Alternative setup helpers:
 
-- Windows, macOS, Linux: `node ./scripts/setup_openai.js`
-- macOS, Linux shells only: `./scripts/setup_openai.sh`
+- Windows, macOS, Linux: `node ./scripts/setup_model.js`
+- macOS, Linux shells only: `./scripts/setup_model.sh`
 
 If you do not need a local proxy, choose `n` when the setup script asks about proxy configuration. Mochi reads `~/.openai-env` directly at runtime. On Windows you usually only need to restart the Extension Development Host after setup; no `source` step is required.
 
-Start the VS Code extension:
+Start the extension from source:
 
 1. Open this repository in VS Code.
 2. Press `F5`.
@@ -97,6 +131,10 @@ Mochi can answer questions, inspect files, make workspace edits, and use the act
 
 For complex work, Mochi may delegate bounded subtasks to specialized subagents. Delegation remains visible in run traces, and subagents receive selected memory and skills rather than unrestricted long-term memory.
 
+Memory is user-visible and controllable. The product model has exactly three layers: Current Window Memory, Long-Term Memory, and Runtime Trace. The chat panel has a `Private` toggle for browser-private-window style work that uses only the current window context and skips saved memory reads. Run `Mochi: Open Memory Controls` to inspect the current memory state. Use `Mochi: Delete Current Window Artifacts` to delete that window's chat, working state, trace, and routing artifacts. The older granular controls remain available from Memory Controls and the Command Palette during the transition.
+
+The current implementation still has internal session, task-like working state, workspace, and user stores. The memory model is captured in `doc/memory-model.md` and `doc/memory-model.zh.md`; it defines the three layers, current storage locations, lifecycle, archive/delete rules, Private mode, and Memory Controller boundaries. User preference, project fact/convention, decision, and window archive are Long-Term Memory record kinds, not separate layers. Non-private windows should archive into a `window_archive` Long-Term Memory record when closed/deleted unless the user explicitly discards without archive. `doc/memory-v2.md` tracks the implementation plan.
+
 The current workflow is optimized for local development:
 
 1. Open a workspace folder.
@@ -116,8 +154,32 @@ The current workflow is optimized for local development:
 | `Local Agent: Select Workspace Folder` | Choose which folder Mochi should treat as the active workspace. |
 | `Local Agent: Open Memory Snapshot` | Open a compact memory and trace snapshot. |
 | `Local Agent: Open Raw Memory Snapshot` | Open the raw stored memory snapshot. |
+| `Mochi: Open Memory Controls` | Inspect current memory state and available memory commands. |
+| `Mochi: Toggle Current Window Private Mode` | Prevent reading saved memory and memory from other sessions in this window. |
+| `Mochi: Toggle Current Window Memory Isolation` | Prevent or allow reading memory from other sessions. |
+| `Mochi: Toggle Current Window Persistent Memory Reads` | Prevent or allow reading persistent memory in the current window. |
+| `Mochi: Delete Current Window Artifacts` | Delete the current window's chat, working state, trace, and routing artifacts. |
+| `Mochi: Clear Current Window Memory` | Clear summaries, working state, traces, and routing memory for the current window while keeping chat messages. |
+| `Mochi: Clear Current Session Summary Memory` | Clear the current session summary and compaction memory. |
+| `Mochi: Clear Current Window Working State` | Transitional internal command for clearing current working-state records. |
+| `Mochi: Clear Current Workspace Memory` | Clear detected workspace facts and verification hints. |
+| `Mochi: Clear User Memory` | Clear saved user preferences. |
+| `Mochi: Clear Current Trace Memory` | Clear latest run trace and routing state. |
+| `Mochi: Clear All Local Memory` | Clear all local memory categories while keeping chat sessions and messages. |
 
 For the full command reference, see `doc/commands-and-capabilities.md`.
+
+## Slash Shortcuts
+
+The chat input supports a small `/` shortcut menu. It is intentionally not a duplicate of the full command palette.
+
+Current shortcuts:
+
+- `/help`
+- `/new`
+- `/memory`
+- `/clear-private-window`
+- `/model`
 
 ## Safety Model
 
@@ -129,6 +191,10 @@ Mochi treats the workspace as shared state:
 - Local command execution requires approval.
 - Tool results are recorded so Mochi can distinguish success, failure, denial, and skipped work.
 - Run traces capture tool calls, approvals, changed paths, command evidence, and verification status.
+- Current-window isolation prevents cross-session memory recall.
+- Persistent memory reads can be disabled per current window.
+- Private mode blocks persistent memory reads and cross-session recall for the current window.
+- Users can clear the current window's memory or all local Mochi memory.
 
 This makes the extension useful for real local work while keeping potentially surprising actions visible.
 
@@ -156,6 +222,9 @@ The JavaScript runtime is the only product runtime path. Use the launch configur
 
 - `doc/current-features-and-usage.md`
 - `doc/current-architecture.md`
+- `doc/memory-model.md`
+- `doc/memory-model.zh.md`
+- `doc/memory-v2.md`
 - `doc/commands-and-capabilities.md`
 - `doc/roadmap.md`
 - `doc/development-log.md`

@@ -52,8 +52,8 @@ Later cleanup:
 
 - removed the Python reference agent after the JavaScript runtime became the only maintained product path
 - removed the shell prompt wrapper after the VS Code JavaScript runtime became the only maintained product path
-- kept `scripts/setup_openai.sh` for OpenAI environment configuration
-- added `scripts/setup_openai.js` as a cross-platform OpenAI setup helper for Windows, macOS, and Linux
+- kept `scripts/setup_openai.sh` as a compatibility wrapper for older OpenAI setup instructions
+- added `scripts/setup_model.js` as a cross-platform model provider setup helper for Windows, macOS, and Linux
 
 ## Phase 3: VS Code Runtime Shift To OpenAI Agents SDK
 
@@ -933,12 +933,79 @@ Why it matters:
 - the runtime stays simple because provider switching is handled through environment configuration
 - the setup prompt is clearer for first-time users and avoids mixing OpenAI and Gemini keys
 
+## Phase 46: Local Packaging, Config Reuse, And Memory Controls
+
+Mochi gained a more complete local extension testing and memory-control surface.
+
+What changed:
+
+- extension identity is now `zee.mochi-local-agent`
+- local VSIX packaging is documented and covered by `.vscodeignore`
+- local test reports are generated as `test-report.json` and `test-report.md`
+- model configuration now checks VS Code Secret Storage first, then VS Code settings, then local environment / `~/.openai-env`
+- first-run chat can reuse existing local model configuration instead of forcing duplicate setup
+- Memory Controls now expose policy toggles and granular clear actions
+- commands exist for clearing session summary, internal working state, workspace memory, user memory, trace/routing memory, and all local memory
+- current-window memory clear preserves visible chat messages
+- clear-all local memory preserves chat sessions and messages while clearing memory categories
+
+Why it matters:
+
+- local verification is now easier from both F5 and packaged VSIX flows
+- users can inspect and clear memory categories without deleting the whole chat
+- setup is less annoying because local configuration is reused when possible
+
+## Phase 47: Private Window Mode And Memory V2 Design
+
+Mochi now has a clearer private-window story and a written target design for the next memory system.
+
+What changed:
+
+- the chat panel now exposes `Private` as a direct current-window toggle
+- the old `Tools` button was removed from the chat panel
+- the slash menu was reduced to high-frequency shortcuts only:
+  - `/help`
+  - `/new`
+  - `/memory`
+  - `/clear-private-window`
+  - `/model`
+- Private mode sets:
+  - `privateWindow: true`
+  - `isolateSession: true`
+  - `disablePersistentMemory: true`
+- current-window artifact deletion deletes the current session record and linked task artifacts while leaving other sessions untouched
+- run finalization now applies persistent-memory policy using the run's base session id, avoiding policy mix-ups when switching windows
+- `doc/memory-model.md` and `doc/memory-model.zh.md` now define the exact three layers, Long-Term Memory record kinds, Current Window Memory storage details, lifecycle, archive/delete behavior, Private mode, and Memory Controller boundaries
+- `doc/memory-v2.md` now tracks the next implementation plan, including storage layout, read/write policy, long-term memory eligibility, memory event logging, and testing requirements
+- Memory V2 now treats task-like records as internal working state rather than user-facing memory
+- the memory model is now strict: Current Window Memory, Long-Term Memory, and Runtime Trace
+- non-private window archive/delete is now the first intended path for compressing Current Window Memory into a `kind: "window_archive"` Long-Term Memory record
+- discard-without-archive is defined as a separate confirmed destructive action
+- natural-language memory deletion is proposal-only and must not directly delete memory
+
+Why it matters:
+
+- Private mode is now a visible product concept instead of a hidden command
+- the chat shortcut surface is smaller and less confusing
+- the memory system now has a concrete next design instead of evolving through scattered patches
+
+Follow-up direction:
+
+- add `memory_events.json` and a `MemoryEventStore`
+- split trace/debug memory into a dedicated store
+- make `MemoryCommit` explicit after each run
+- add explicit remember/forget flows
+- design the current-window-to-long-term promotion trigger before implementing automatic promotion
+- replace Memory Controls QuickPick with a category-based management panel
+- add closed-loop integration tests for every memory layer
+
 ## Next Likely Steps
 
-- introduce a real multi-agent v1 role split
-- connect agent-specific memory slices to those roles
-- add a memory selector to reduce overlap between active task memory, session summaries, and referenced task summaries
-- design a timestamped maintenance compactor agent for structured memory patches, but do not put it on the critical path yet
+- implement Memory V2 storage and event logging
+- add explicit remember/forget flows
+- turn Memory Controls into a category-based management panel
+- add a memory selector to reduce overlap between current-window summaries, internal working state, and long-term memory
+- keep expanding role-based multi-agent behavior on top of selected memory slices
 - add better visibility into task routing decisions and scores
 - add safer destructive tool approval flows
 - evaluate where the OpenAI SDK session abstractions can replace hand-rolled generic session plumbing without weakening Mochi-specific memory layers

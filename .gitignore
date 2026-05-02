@@ -14,6 +14,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.mochi/
 .mochi/memory/
 .mochi/state/
 .mochi/storage/
@@ -25,4 +26,7 @@ pnpm-debug.log*
 # VS Code extension output
 out/
 dist/
+coverage/
 *.vsix
+test-report.json
+test-report.md

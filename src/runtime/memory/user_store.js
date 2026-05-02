@@ -31,6 +31,13 @@ class UserStore {
 
     return data.preferences[key];
   }
+
+  async resetAllPreferences() {
+    return this.store.write({
+      version: 1,
+      preferences: {},
+    });
+  }
 }
 
 module.exports = {

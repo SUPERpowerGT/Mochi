@@ -104,7 +104,7 @@ What it does:
 - exports a compact memory/debug snapshot to a JSON document in VS Code
 - shows the active task, latest turn classification, task routing diagnostics, compact trace summary, workspace facts, preferences, and a short recent task list
 - shows whether the current session has a compacted summary and how much raw history remains
-- avoids dumping full session history, all raw tasks, and full raw traces by default
+- avoids dumping full session history, all raw working-state records, and full raw traces by default
 
 ### `Local Agent: Open Raw Memory Snapshot`
 
@@ -115,7 +115,7 @@ Command id:
 What it does:
 
 - exports the full current memory state to a JSON document in VS Code
-- shows session memory, full task memory, full session task list, workspace memory, and user preferences
+- shows session memory, internal working-state records, workspace memory, and user preferences
 - includes session summary and compaction metadata when older history has been compacted
 - includes the composed memory text currently being injected into the runtime
 - includes the latest session turn classification
@@ -130,6 +130,86 @@ When to use it:
 - when you want to inspect task rollover or task reactivation behavior
 - before doing deeper multi-agent or prompt debugging
 
+### `Mochi: Open Memory Controls`
+
+Command id:
+
+- `localAgent.openMemoryControls`
+
+What it does:
+
+- opens the current memory controls surface
+- shows current policy state and memory counts
+- provides access to granular memory clear actions
+
+When to use it:
+
+- when you want to inspect or manage current-window memory
+- when you need clear controls that are more detailed than the small slash shortcut menu
+
+### `Mochi: Toggle Current Window Private Mode`
+
+Command id:
+
+- `localAgent.togglePrivateWindowMode`
+
+What it does:
+
+- toggles current-window Private mode
+- enables session isolation and disables persistent memory reads for the current window
+- syncs the chat-panel `Private` switch state
+
+When to use it:
+
+- when you want a browser-private-window style Mochi session
+- when the current conversation should not read saved task, workspace, user, session-summary, or cross-session memory
+
+### `Mochi: Delete Current Window Artifacts`
+
+Command id:
+
+- `localAgent.destroyCurrentWindowArtifacts`
+
+What it does:
+
+- deletes the current window's session record
+- deletes internal working-state records linked to that current window/session
+- clears current-window trace and routing products
+- leaves other sessions untouched
+
+When to use it:
+
+- when a private or throwaway Mochi window should be cleaned up completely
+
+### Granular Memory Commands
+
+These commands remain available from the Command Palette and Memory Controls:
+
+- `Mochi: Toggle Current Window Memory Isolation`
+- `Mochi: Toggle Current Window Persistent Memory Reads`
+- `Mochi: Clear Current Window Memory`
+- `Mochi: Clear Current Session Summary Memory`
+- `Mochi: Clear Current Window Working State`
+- `Mochi: Clear Current Workspace Memory`
+- `Mochi: Clear User Memory`
+- `Mochi: Clear Current Trace Memory`
+- `Mochi: Clear All Local Memory`
+
+The slash menu intentionally does not expose every memory command. It currently keeps only high-frequency shortcuts:
+
+- `/help`
+- `/new`
+- `/memory`
+- `/clear-private-window`
+- `/model`
+
+Memory is being simplified toward two user-facing categories:
+
+- Current Window Memory
+- Long-Term Memory
+
+Task-like records remain internal working state and should not be treated as user-facing long-term memory.
+
 ## VS Code Extension Capability Summary
 
 The extension path currently supports:
@@ -139,6 +219,9 @@ The extension path currently supports:
 - selecting the active workspace folder
 - inserting the latest reply into the editor
 - inspecting the current memory snapshot
+- toggling current-window Private mode from the chat panel
+- deleting current-window artifacts
+- managing memory categories through Memory Controls and Command Palette commands
 - running on the JavaScript OpenAI Agents SDK runtime path rather than the old Python subprocess path
 
 ## Runtime Tool Capabilities
@@ -211,8 +294,8 @@ This is not a VS Code command-palette command, but it is still part of the local
 
 Path:
 
-- `./scripts/setup_openai.js`
-- `./scripts/setup_openai.sh`
+- `./scripts/setup_model.js`
+- `./scripts/setup_model.sh`
 
 What it does:
 
@@ -226,13 +309,13 @@ What it does:
 Use:
 
 ```bash
-npm run setup:openai
+npm run setup:model
 ```
 
 Shell-only alternative for macOS or Linux:
 
 ```bash
-./scripts/setup_openai.sh
+./scripts/setup_model.sh
 ```
 
 ## Which Path To Use

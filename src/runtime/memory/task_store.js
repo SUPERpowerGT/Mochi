@@ -254,6 +254,26 @@ class TaskStore {
       .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
   }
 
+  async clearTasksForSession(sessionId) {
+    const data = await this.store.update((current) => {
+      for (const [taskId, task] of Object.entries(current.tasks || {})) {
+        if (isTaskLinkedToSession(task, sessionId)) {
+          delete current.tasks[taskId];
+        }
+      }
+      return current;
+    });
+
+    return data.tasks || {};
+  }
+
+  async resetAllTasks() {
+    return this.store.write({
+      version: 1,
+      tasks: {},
+    });
+  }
+
   findMostRecentActiveTask(data, sessionId) {
     if (!data || !data.tasks || !sessionId) {
       return null;

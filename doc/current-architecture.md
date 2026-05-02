@@ -332,27 +332,27 @@ Current behavior:
 - command traces can now also carry lightweight execution evidence such as exit code and stdout / stderr previews
 - lifecycle traces can now summarize how many tools ran, how many high-risk tools were attempted, and how many tool calls failed
 
-### Task Memory
+### Internal Working State
 
 Stores:
 
-- active task per session
-- recent task list for the session
-- task goal
-- task title
+- active working target per session
+- recent working-state list for the session
+- current goal
+- working title
 - turn count
 - latest user prompt
 - latest assistant reply
 
 Current behavior:
 
-- work turns first create a routing plan rather than immediately mutating the active task
+- work turns first create a routing plan rather than immediately mutating the active working state
 - the planned task change is only committed after the agent run completes successfully
-- failed or interrupted runs therefore do not leave behind empty active tasks
-- short follow-up work prompts stay on the current task
-- clearly different work goals can trigger task rollover into a new active task
-- older inactive tasks can be reactivated when a new work prompt matches them strongly enough
-- non-work turns no longer create new tasks just because they are textually different
+- failed or interrupted runs therefore do not leave behind empty active working-state records
+- short follow-up work prompts stay on the current working target
+- clearly different work goals can trigger rollover into a new working target
+- older inactive targets can be reactivated when a new work prompt matches them strongly enough
+- non-work turns no longer create new working-state records just because they are textually different
 - the latest routing decision now records diagnostics such as:
   - current-task score
   - best inactive-task score
@@ -370,6 +370,7 @@ Design principle:
 - task routing is being kept as a general policy layer rather than a collection of one-off prompt patches
 - the current router uses generic prompt signals and thresholds
 - future upgrades should add richer signals without hard-coding specific user phrases or demo scenarios
+- this layer is internal working state, not user-facing Long-Term Memory
 
 ### Workspace Memory
 
@@ -385,7 +386,7 @@ Stores:
 Related context source:
 
 - project-level instruction files such as `MOCHI.md`, `AGENTS.md`, `CLAUDE.md`, `.mochi/MOCHI.md`, and `.claude/CLAUDE.md` are loaded separately into runtime input when present
-- these are not persisted as task memory; they act more like repo guidance for the current run
+- these are not persisted as working state; they act more like repo guidance for the current run
 
 Current role in verification:
 
@@ -419,14 +420,72 @@ Tradeoff:
 
 This is acceptable for the current local extension phase.
 
+## Memory Model And V2 Direction
+
+The memory semantics are documented in `memory-model.md` and `memory-model.zh.md`.
+The implementation plan is documented in `memory-v2.md`.
+
+The target model keeps the current JSON-first approach but makes memory lifecycle rules explicit:
+
+- `sessions.json` for visible session state, history, summaries, and current routing pointers
+- `tasks.json` for internal working state during the transition; it is not the target user-facing memory model
+- `workspaces.json` for detected and confirmed workspace facts
+- `user.json` for stable user preferences
+- `traces.json` for run/debug evidence that should not usually be injected as long-term model context
+- `memory_events.json` for audit records explaining why memory was added, updated, deleted, or skipped
+
+The target model has exactly three layers:
+
+- Current Window Memory
+- Long-Term Memory
+- Runtime Trace
+
+Task-like records should stay internal unless a future explicit promotion flow saves selected durable facts into Long-Term Memory.
+User preference, project fact/convention, decision, and window archive are Long-Term Memory record kinds, not additional layers.
+Natural-language chat must not directly delete memory; deletion belongs to Memory Controller flows with explicit confirmation.
+
+The intended write pipeline is:
+
+```text
+prompt + reply + trace
+  -> memory classifier
+  -> memory policy
+  -> memory patch
+  -> memory commit
+  -> memory event log
+```
+
+The intended read pipeline is:
+
+```text
+prompt
+  -> memory retrieval plan
+  -> policy filter
+  -> relevance selection
+  -> context budget
+  -> injected memory text
+```
+
+Private mode is a hard policy boundary for the current window:
+
+- read current visible chat context
+- do not read session summary, workspace memory, user memory, explicit long-term memory, or recent sessions
+- do not write workspace, user, or long-term summary memory
+- may keep current-window working state only inside the current window
+- keep only current-window debug artifacts until the user deletes current-window artifacts
+
+The current implementation already enforces the main read-side behavior by setting `disablePersistentMemory` and `isolateSession` for Private mode. The next step is to make write-side commits and memory event logging explicit.
+
 ## Known Architectural Constraints
 
 - streamed replies now work, but the chat streaming UX still needs further polish around typography and pacing
 - memory writes are simple and local
-- agent-specific memory slicing is not yet fully implemented
-- there is no dedicated memory selector yet, so active task memory and session summaries may occasionally repeat related context
-- there is no LLM-based maintenance compactor yet; current compaction summarizes older history locally and conservatively
-- task memory is still intentionally lightweight and currently relies mainly on prompt-level signals
+- agent-specific memory slicing exists in a lightweight form, but it is not yet a full selector/deduper
+- there is no dedicated memory selector yet, so internal working state and session summaries may occasionally repeat related context
+- the memory maintainer exists for compacted summary cleanup, but the broader Memory V2 commit pipeline is not implemented yet
+- task-like working state is still intentionally lightweight and currently relies mainly on prompt-level signals
+- explicit memory events, explicit remember/forget commands, and a dedicated trace store are not implemented yet
+- non-private window archive/delete is the intended first promotion path into a `kind: "window_archive"` Long-Term Memory record; additional automatic promotion remains undesigned
 - turn classification is still heuristic and local rather than model-backed
 - the project does not yet use the OpenAI SDK session abstraction as its primary persisted session layer
 - destructive approval currently covers file deletion and file clearing, but it is not yet a broader action approval framework
