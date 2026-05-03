@@ -35,6 +35,7 @@ const {
   mapStreamEventToActivity,
 } = require("./support/stream_event_mapper");
 const { createRuntimeTools } = require("./tools");
+const { normalizeIdentity } = require("./support/runtime_identity");
 
 class OpenAIAgentsRuntime {
   constructor(options = {}) {
@@ -65,12 +66,17 @@ class OpenAIAgentsRuntime {
       streamedText: "",
       clearedClarificationDraft: false,
     };
+    this.currentIdentity = normalizeIdentity(options.currentIdentity);
     this.memoryManager =
       options.memoryManager ||
       new MemoryManager({
         storageRoot: options.memoryStorageRoot,
         getWorkspaceRoot: this.getWorkspaceRoot,
         baseSessionId: options.baseSessionId,
+        currentIdentity: this.currentIdentity,
+        sessionSyncBaseUrl: options.sessionSyncBaseUrl,
+        sessionSyncAuthToken: options.sessionSyncAuthToken,
+        sessionSyncClient: options.sessionSyncClient,
       });
   }
 
@@ -199,6 +205,22 @@ class OpenAIAgentsRuntime {
     return this.memoryManager.getBaseSessionId();
   }
 
+  setIdentity(identity) {
+    this.currentIdentity = normalizeIdentity(identity || this.currentIdentity);
+    this.memoryManager.setIdentity(this.currentIdentity);
+    this.agents = null;
+  }
+
+  getIdentity() {
+    return this.currentIdentity;
+  }
+
+  setSessionSyncAuthToken(token) {
+    if (this.memoryManager && this.memoryManager.setSessionSyncAuthToken) {
+      this.memoryManager.setSessionSyncAuthToken(token);
+    }
+  }
+
   async getCurrentSessionMessagesForUi(baseSessionId = null) {
     return this.memoryManager.getCurrentSessionMessagesForUi(baseSessionId);
   }
@@ -213,6 +235,14 @@ class OpenAIAgentsRuntime {
 
   async ensureCurrentSession() {
     return this.memoryManager.ensureCurrentSession();
+  }
+
+  async listRestoreCheckpoints(options = {}) {
+    return this.memoryManager.listRestoreCheckpoints(options);
+  }
+
+  async restoreCheckpoint(checkpointId) {
+    return this.memoryManager.restoreCheckpoint(checkpointId);
   }
 
   async getRootAgent() {

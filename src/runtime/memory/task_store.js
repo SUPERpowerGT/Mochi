@@ -208,6 +208,43 @@ class TaskStore {
     return data.tasks[taskId] || null;
   }
 
+  async upsertSyncedTask({ sessionId, workspaceId, task }) {
+    if (!task || typeof task !== "object") {
+      return null;
+    }
+
+    const taskId = task.id || `task:${sessionId}:synced`;
+    const data = await this.store.update((current) => {
+      const existing = current.tasks[taskId] || {};
+      current.tasks[taskId] = {
+        ...existing,
+        id: taskId,
+        sessionId,
+        workspaceId,
+        title: task.title || existing.title || "Synced task",
+        goal: task.goal || existing.goal || "",
+        status: task.status || existing.status || "active",
+        sessionIds: [sessionId],
+        lastSessionId: sessionId,
+        createdAt: existing.createdAt || nowIso(),
+        updatedAt: task.updatedAt || nowIso(),
+        turnCount: Number.isFinite(task.turnCount) ? task.turnCount : existing.turnCount || 0,
+        lastUserPrompt: task.lastUserPrompt || existing.lastUserPrompt || "",
+        latestAssistantReply: task.latestAssistantReply || existing.latestAssistantReply || "",
+        summary: task.summary || existing.summary || "",
+        lastOutcome: task.lastOutcome || existing.lastOutcome || "",
+        notes: Array.isArray(task.notes) ? task.notes : existing.notes || [],
+        relatedFiles: Array.isArray(task.relatedFiles) ? task.relatedFiles : existing.relatedFiles || [],
+      };
+      this.normalizeTasksForSession(current, sessionId, {
+        activeTaskId: current.tasks[taskId].status === "active" ? taskId : null,
+      });
+      return current;
+    });
+
+    return data.tasks[taskId] || null;
+  }
+
   async listReferencedTaskSummaries({ workspaceId, sessionId, prompt, excludeTaskId, limit = 3 }) {
     const data = await this.store.read();
     const candidates = Object.values(data.tasks)

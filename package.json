@@ -10,6 +10,9 @@
     "url": "https://github.com/SUPERpowerGT/Mochi.git"
   },
   "type": "commonjs",
+  "scripts": {
+    "setup:openai": "node ./scripts/setup_openai.js"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -31,6 +34,13 @@
     "onCommand:localAgent.sendSelection",
     "onCommand:localAgent.applyLastReply",
     "onCommand:localAgent.quickAsk",
+    "onCommand:localAgent.signIn",
+    "onCommand:localAgent.register",
+    "onCommand:localAgent.signOut",
+    "onCommand:localAgent.switchDeviceProfile",
+    "onCommand:localAgent.switchUserProfile",
+    "onCommand:localAgent.restoreCheckpoint",
+    "onCommand:localAgent.analyzeLatestCommit",
     "onCommand:localAgent.selectWorkspaceFolder",
     "onCommand:localAgent.openMemorySnapshot",
     "onCommand:localAgent.openRawMemorySnapshot",
@@ -72,6 +82,34 @@
       {
         "command": "localAgent.quickAsk",
         "title": "Local Agent: Quick Ask"
+      },
+      {
+        "command": "localAgent.signIn",
+        "title": "Local Agent: Sign In"
+      },
+      {
+        "command": "localAgent.register",
+        "title": "Local Agent: Register"
+      },
+      {
+        "command": "localAgent.signOut",
+        "title": "Local Agent: Sign Out"
+      },
+      {
+        "command": "localAgent.switchDeviceProfile",
+        "title": "Local Agent: Switch Device Profile"
+      },
+      {
+        "command": "localAgent.switchUserProfile",
+        "title": "Local Agent: Switch User Profile"
+      },
+      {
+        "command": "localAgent.restoreCheckpoint",
+        "title": "Local Agent: Restore Checkpoint"
+      },
+      {
+        "command": "localAgent.analyzeLatestCommit",
+        "title": "Local Agent: Analyze Latest Commit"
       },
       {
         "command": "localAgent.selectWorkspaceFolder",

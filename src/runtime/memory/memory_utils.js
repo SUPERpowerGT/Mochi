@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const path = require("path");
 
 function nowIso() {
   return new Date().toISOString();
@@ -10,6 +11,13 @@ function createWorkspaceId(workspaceRoot) {
   }
 
   return `workspace:${crypto.createHash("sha1").update(workspaceRoot).digest("hex")}`;
+}
+
+function createWorkspaceSyncKey(workspaceRoot, detected = null) {
+  const projectName = detected && typeof detected.projectName === "string" && detected.projectName.trim()
+    ? detected.projectName.trim()
+    : path.basename(workspaceRoot || "") || "workspace";
+  return `workspace-sync:${projectName.toLowerCase()}`;
 }
 
 function createSessionId(baseSessionId, workspaceId) {
@@ -166,6 +174,7 @@ function detectPreferredLanguage(prompt) {
 module.exports = {
   nowIso,
   createWorkspaceId,
+  createWorkspaceSyncKey,
   createSessionId,
   deriveTaskTitle,
   normalizePrompt,

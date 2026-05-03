@@ -31,6 +31,22 @@ class UserStore {
 
     return data.preferences[key];
   }
+
+  async applyPreferences(preferences = {}) {
+    const items = preferences && typeof preferences === "object" ? Object.entries(preferences) : [];
+    for (const [key, value] of items) {
+      if (!value || typeof value !== "object") {
+        continue;
+      }
+
+      await this.setPreference(key, value.value, {
+        confidence: value.confidence || "synced",
+        source: value.source || "session-sync",
+      });
+    }
+
+    return this.getPreferences();
+  }
 }
 
 module.exports = {

@@ -18,6 +18,7 @@ async function readJsonIfPresent(filePath) {
 async function detectWorkspaceFacts(workspaceRoot) {
   if (!workspaceRoot) {
     return {
+      projectName: "",
       packageManager: null,
       languages: [],
       manifests: [],
@@ -30,6 +31,7 @@ async function detectWorkspaceFacts(workspaceRoot) {
 
   const manifests = [];
   const languages = new Set();
+  let projectName = path.basename(workspaceRoot || "") || "workspace";
   let packageManager = null;
   let packageJsonHasTestScript = false;
   let packageJsonHasLintScript = false;
@@ -45,6 +47,9 @@ async function detectWorkspaceFacts(workspaceRoot) {
   if (packageJson) {
     manifests.push("package.json");
     languages.add("javascript");
+    if (typeof packageJson.name === "string" && packageJson.name.trim()) {
+      projectName = packageJson.name.trim();
+    }
     if (packageJson.scripts && typeof packageJson.scripts === "object") {
       packageJsonHasTestScript = typeof packageJson.scripts.test === "string";
       packageJsonHasLintScript = typeof packageJson.scripts.lint === "string";
@@ -154,6 +159,7 @@ async function detectWorkspaceFacts(workspaceRoot) {
   }
 
   return {
+    projectName,
     packageManager,
     languages: Array.from(languages),
     manifests,
@@ -202,6 +208,36 @@ class WorkspaceStore {
   async getWorkspace(workspaceId) {
     const data = await this.store.read();
     return data.workspaces[workspaceId] || null;
+  }
+
+  async applySyncedWorkspace(workspaceId, workspaceRoot, syncedWorkspace = {}) {
+    const detected = syncedWorkspace.detected && typeof syncedWorkspace.detected === "object"
+      ? syncedWorkspace.detected
+      : await detectWorkspaceFacts(workspaceRoot);
+
+    const data = await this.store.update((current) => {
+      if (!current.workspaces[workspaceId]) {
+        current.workspaces[workspaceId] = {
+          id: workspaceId,
+          rootPath: workspaceRoot || "",
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          detected,
+          notes: Array.isArray(syncedWorkspace.notes) ? syncedWorkspace.notes : [],
+        };
+        return current;
+      }
+
+      current.workspaces[workspaceId].rootPath = workspaceRoot || current.workspaces[workspaceId].rootPath || "";
+      current.workspaces[workspaceId].detected = detected;
+      current.workspaces[workspaceId].notes = Array.isArray(syncedWorkspace.notes)
+        ? syncedWorkspace.notes
+        : current.workspaces[workspaceId].notes || [];
+      current.workspaces[workspaceId].updatedAt = nowIso();
+      return current;
+    });
+
+    return data.workspaces[workspaceId];
   }
 }
 

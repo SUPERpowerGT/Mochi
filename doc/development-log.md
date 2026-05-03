@@ -52,7 +52,8 @@ Later cleanup:
 
 - removed the Python reference agent after the JavaScript runtime became the only maintained product path
 - removed the shell prompt wrapper after the VS Code JavaScript runtime became the only maintained product path
-- kept `scripts/setup_model.sh` for local model provider environment configuration
+- kept `scripts/setup_openai.sh` for OpenAI environment configuration
+- added `scripts/setup_openai.js` as a cross-platform OpenAI setup helper for Windows, macOS, and Linux
 
 ## Phase 3: VS Code Runtime Shift To OpenAI Agents SDK
 
