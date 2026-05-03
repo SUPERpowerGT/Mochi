@@ -190,6 +190,37 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         flex-direction: column;
         gap: 10px;
       }
+      .utility-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 90%, black 10%);
+      }
+      .auth-summary {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+      .auth-title {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .auth-meta {
+        font-size: 11px;
+        opacity: 0.72;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .auth-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
       .bubble {
         max-width: 92%;
         padding: 11px 13px;
@@ -500,6 +531,13 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         line-height: 1;
         box-shadow: none;
       }
+      .toolbar-button {
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        line-height: 1;
+        box-shadow: none;
+      }
       button:hover:not(:disabled) {
         filter: brightness(1.05);
         transform: translateY(-1px);
@@ -527,6 +565,185 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         font-size: 12px;
         padding-left: 2px;
       }
+      .auth-overlay {
+        position: fixed;
+        inset: 0;
+        background: color-mix(in srgb, var(--vscode-editor-background) 60%, black 40%);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .auth-overlay.is-open {
+        display: flex;
+      }
+      .auth-dialog {
+        width: min(420px, 100%);
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        background: var(--mochi-surface);
+        border: 1px solid var(--mochi-border);
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        padding: 18px 18px 16px;
+        display: grid;
+        gap: 14px;
+      }
+      .auth-dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .auth-dialog-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .auth-dialog-close {
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        border: 0;
+        box-shadow: none;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .auth-dialog-close:hover {
+        opacity: 1;
+        background: color-mix(in srgb, var(--vscode-editor-foreground) 8%, transparent);
+        transform: none;
+      }
+      .auth-dialog-tabs {
+        display: flex;
+        gap: 6px;
+        border-bottom: 1px solid var(--mochi-border);
+        padding-bottom: 0;
+      }
+      .auth-tab {
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .auth-tab.is-active {
+        opacity: 1;
+        border-bottom-color: var(--mochi-accent);
+        color: var(--mochi-accent);
+      }
+      .auth-tab:hover:not(:disabled) {
+        opacity: 1;
+        transform: none;
+        box-shadow: none;
+        background: transparent;
+      }
+      .auth-form {
+        display: grid;
+        gap: 10px;
+      }
+      .auth-field {
+        display: grid;
+        gap: 4px;
+      }
+      .auth-field label {
+        font-size: 11px;
+        opacity: 0.78;
+        font-weight: 500;
+      }
+      .auth-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 13px;
+        line-height: 1.4;
+        border-radius: 8px;
+        border: 1px solid var(--vscode-input-border, rgba(127,127,127,0.5));
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+      }
+      .auth-input:focus {
+        outline: none;
+        border-color: var(--mochi-accent);
+        box-shadow: 0 0 0 1px var(--mochi-accent);
+      }
+      .auth-error {
+        display: none;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.18)) 70%, var(--mochi-surface) 30%);
+        border: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 40%, transparent);
+        color: var(--vscode-errorForeground, #f14c4c);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .auth-error.is-shown {
+        display: block;
+      }
+      .auth-actions-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .auth-submit {
+        padding: 8px 14px;
+        font-size: 12px;
+        border-radius: 999px;
+      }
+      .auth-hint {
+        font-size: 11px;
+        opacity: 0.65;
+        line-height: 1.45;
+      }
+      .restore-list {
+        display: grid;
+        gap: 8px;
+        max-height: 360px;
+        overflow-y: auto;
+      }
+      .restore-empty {
+        font-size: 12px;
+        opacity: 0.7;
+        text-align: center;
+        padding: 24px 6px;
+      }
+      .restore-card {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+        cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease;
+      }
+      .restore-card:hover {
+        border-color: var(--mochi-accent);
+        background: color-mix(in srgb, var(--mochi-accent) 10%, var(--vscode-editor-background) 90%);
+      }
+      .restore-card-title {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .restore-card-meta {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+      .restore-card-summary {
+        font-size: 12px;
+        opacity: 0.85;
+        line-height: 1.45;
+      }
     </style>
   </head>
   <body>
@@ -538,6 +755,19 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           </div>
           <div id="sessionTabs" class="session-tabs" aria-label="Mochi sessions"></div>
           <button class="tab-add-button" id="newSession" type="button" title="New session">+</button>
+        </div>
+      </div>
+      <div class="utility-bar">
+        <div class="auth-summary">
+          <div id="authTitle" class="auth-title">Signed out</div>
+          <div id="authMeta" class="auth-meta">Sign in to enable cloud checkpoint sync and cross-device restore.</div>
+        </div>
+        <div class="auth-actions">
+          <button id="signInButton" class="ghost toolbar-button" type="button">Sign In</button>
+          <button id="registerButton" class="ghost toolbar-button" type="button">Register</button>
+          <button id="signOutButton" class="ghost toolbar-button" type="button" hidden>Sign Out</button>
+          <button id="restoreButton" class="ghost toolbar-button" type="button" hidden>Restore</button>
+          <button id="workspaceButton" class="ghost toolbar-button" type="button">Workspace</button>
         </div>
       </div>
       <div id="messages" class="messages">
@@ -552,6 +782,54 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         </div>
       </div>
     </div>
+    <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="authDialogTitle">
+      <div class="auth-dialog">
+        <div class="auth-dialog-header">
+          <div id="authDialogTitle" class="auth-dialog-title">Sign in to Mochi</div>
+          <button id="authDialogClose" class="auth-dialog-close" type="button" aria-label="Close">x</button>
+        </div>
+        <div class="auth-dialog-tabs" role="tablist">
+          <button id="authTabSignIn" class="auth-tab is-active" type="button" role="tab">Sign In</button>
+          <button id="authTabRegister" class="auth-tab" type="button" role="tab">Register</button>
+        </div>
+        <form id="authForm" class="auth-form" autocomplete="off">
+          <div id="authErrorBox" class="auth-error" role="alert"></div>
+          <div id="authFieldDisplayName" class="auth-field" hidden>
+            <label for="authDisplayName">Display name</label>
+            <input id="authDisplayName" class="auth-input" type="text" autocomplete="off" />
+          </div>
+          <div class="auth-field">
+            <label for="authEmail">Email</label>
+            <input id="authEmail" class="auth-input" type="email" autocomplete="off" required />
+          </div>
+          <div class="auth-field">
+            <label for="authPassword">Password</label>
+            <input id="authPassword" class="auth-input" type="password" autocomplete="new-password" required />
+          </div>
+          <div class="auth-field">
+            <label for="authDeviceName">Device name</label>
+            <input id="authDeviceName" class="auth-input" type="text" autocomplete="off" />
+          </div>
+          <div class="auth-hint">Credentials are sent only to the configured Mochi identity service. The auth token is stored in VS Code SecretStorage.</div>
+          <div class="auth-actions-row">
+            <button id="authCancel" type="button" class="ghost toolbar-button">Cancel</button>
+            <button id="authSubmit" type="submit" class="auth-submit">Sign In</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="restoreOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="restoreDialogTitle">
+      <div class="auth-dialog">
+        <div class="auth-dialog-header">
+          <div id="restoreDialogTitle" class="auth-dialog-title">Restore checkpoint</div>
+          <button id="restoreDialogClose" class="auth-dialog-close" type="button" aria-label="Close">x</button>
+        </div>
+        <div class="auth-hint">Pick a checkpoint to hydrate into the current workspace. Checkpoints are scoped to your account.</div>
+        <div id="restoreList" class="restore-list">
+          <div class="restore-empty">Loading checkpoints...</div>
+        </div>
+      </div>
+    </div>
     <script>
       (function () {
         const vscode = acquireVsCodeApi();
@@ -561,6 +839,13 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         const sendButton = document.getElementById("send");
         const newSessionButton = document.getElementById("newSession");
         const sessionTabsEl = document.getElementById("sessionTabs");
+        const authTitleEl = document.getElementById("authTitle");
+        const authMetaEl = document.getElementById("authMeta");
+        const signInButton = document.getElementById("signInButton");
+        const registerButton = document.getElementById("registerButton");
+        const signOutButton = document.getElementById("signOutButton");
+        const restoreButton = document.getElementById("restoreButton");
+        const workspaceButton = document.getElementById("workspaceButton");
         let pendingEl = null;
         let pendingShellEl = null;
         let activityStackEl = null;
@@ -570,8 +855,258 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         let loadedBaseSessionId = "";
         let latestSessionSyncVersion = 0;
         let sessions = [];
+        let authState = {
+          isSignedIn: false,
+          email: "",
+          displayName: "",
+          userId: "",
+          deviceName: "",
+          workspaceRoot: "",
+          workspaceSelected: false
+        };
         const draftsBySession = Object.create(null);
         const approvalCards = new Map();
+
+        function renderAuthState(nextState) {
+          authState = Object.assign({}, authState, nextState || {});
+
+          if (authState.isSignedIn) {
+            const title = authState.displayName || authState.email || authState.userId || "Signed in";
+            authTitleEl.textContent = "Signed in as " + title;
+            authMetaEl.textContent = [
+              authState.email || authState.userId || "",
+              authState.deviceName ? ("Device: " + authState.deviceName) : "",
+              authState.workspaceRoot ? ("Workspace: " + authState.workspaceRoot) : "Workspace: none selected"
+            ].filter(Boolean).join("\\n");
+          } else {
+            authTitleEl.textContent = "Signed out";
+            authMetaEl.textContent = authState.workspaceRoot
+              ? "Sign in to enable cloud checkpoint sync and restore.\\nWorkspace: " + authState.workspaceRoot
+              : "Sign in to enable cloud checkpoint sync and cross-device restore.";
+          }
+
+          signInButton.hidden = Boolean(authState.isSignedIn);
+          registerButton.hidden = Boolean(authState.isSignedIn);
+          signOutButton.hidden = !authState.isSignedIn;
+          restoreButton.hidden = !authState.isSignedIn;
+          restoreButton.disabled = !authState.isSignedIn;
+          workspaceButton.textContent = authState.workspaceSelected ? "Switch Workspace" : "Select Workspace";
+        }
+
+        const authOverlayEl = document.getElementById("authOverlay");
+        const authDialogTitleEl = document.getElementById("authDialogTitle");
+        const authTabSignInEl = document.getElementById("authTabSignIn");
+        const authTabRegisterEl = document.getElementById("authTabRegister");
+        const authFormEl = document.getElementById("authForm");
+        const authErrorBoxEl = document.getElementById("authErrorBox");
+        const authFieldDisplayNameEl = document.getElementById("authFieldDisplayName");
+        const authDisplayNameEl = document.getElementById("authDisplayName");
+        const authEmailEl = document.getElementById("authEmail");
+        const authPasswordEl = document.getElementById("authPassword");
+        const authDeviceNameEl = document.getElementById("authDeviceName");
+        const authSubmitEl = document.getElementById("authSubmit");
+        const authCancelEl = document.getElementById("authCancel");
+        const authDialogCloseEl = document.getElementById("authDialogClose");
+        const restoreOverlayEl = document.getElementById("restoreOverlay");
+        const restoreListEl = document.getElementById("restoreList");
+        const restoreDialogCloseEl = document.getElementById("restoreDialogClose");
+
+        let authMode = "signin";
+        let authBusy = false;
+
+        function setAuthMode(mode) {
+          authMode = mode === "register" ? "register" : "signin";
+          if (authMode === "register") {
+            authDialogTitleEl.textContent = "Register a Mochi account";
+            authTabRegisterEl.classList.add("is-active");
+            authTabSignInEl.classList.remove("is-active");
+            authFieldDisplayNameEl.hidden = false;
+            authSubmitEl.textContent = "Create account";
+          } else {
+            authDialogTitleEl.textContent = "Sign in to Mochi";
+            authTabSignInEl.classList.add("is-active");
+            authTabRegisterEl.classList.remove("is-active");
+            authFieldDisplayNameEl.hidden = true;
+            authSubmitEl.textContent = "Sign In";
+          }
+          hideAuthError();
+        }
+
+        function showAuthError(message) {
+          authErrorBoxEl.textContent = String(message || "");
+          authErrorBoxEl.classList.add("is-shown");
+        }
+
+        function hideAuthError() {
+          authErrorBoxEl.textContent = "";
+          authErrorBoxEl.classList.remove("is-shown");
+        }
+
+        function setAuthBusy(busy) {
+          authBusy = Boolean(busy);
+          authSubmitEl.disabled = authBusy;
+          authCancelEl.disabled = authBusy;
+          if (authBusy) {
+            authSubmitEl.dataset.label = authSubmitEl.textContent;
+            authSubmitEl.textContent = "Working...";
+          } else if (authSubmitEl.dataset.label) {
+            authSubmitEl.textContent = authSubmitEl.dataset.label;
+            delete authSubmitEl.dataset.label;
+          }
+        }
+
+        function openAuthDialog(mode) {
+          setAuthMode(mode);
+          if (!authDeviceNameEl.value) {
+            authDeviceNameEl.value = authState.deviceName || "This Machine";
+          }
+          authOverlayEl.classList.add("is-open");
+          setTimeout(function () {
+            (authMode === "register" ? authDisplayNameEl : authEmailEl).focus();
+          }, 30);
+        }
+
+        function closeAuthDialog() {
+          if (authBusy) {
+            return;
+          }
+          authOverlayEl.classList.remove("is-open");
+          authPasswordEl.value = "";
+          hideAuthError();
+        }
+
+        authTabSignInEl.addEventListener("click", function () {
+          setAuthMode("signin");
+        });
+        authTabRegisterEl.addEventListener("click", function () {
+          setAuthMode("register");
+        });
+        authCancelEl.addEventListener("click", closeAuthDialog);
+        authDialogCloseEl.addEventListener("click", closeAuthDialog);
+        authOverlayEl.addEventListener("click", function (event) {
+          if (event.target === authOverlayEl) {
+            closeAuthDialog();
+          }
+        });
+        authFormEl.addEventListener("submit", function (event) {
+          event.preventDefault();
+          if (authBusy) {
+            return;
+          }
+          const payload = {
+            mode: authMode,
+            email: authEmailEl.value.trim(),
+            password: authPasswordEl.value,
+            deviceName: authDeviceNameEl.value.trim() || "This Machine"
+          };
+          if (authMode === "register") {
+            payload.displayName = authDisplayNameEl.value.trim();
+            if (!payload.displayName) {
+              showAuthError("Display name is required.");
+              authDisplayNameEl.focus();
+              return;
+            }
+          }
+          if (!payload.email) {
+            showAuthError("Email is required.");
+            authEmailEl.focus();
+            return;
+          }
+          if (!payload.password) {
+            showAuthError("Password is required.");
+            authPasswordEl.focus();
+            return;
+          }
+          hideAuthError();
+          setAuthBusy(true);
+          vscode.postMessage({ type: "authSubmit", value: payload });
+        });
+
+        function openRestoreDialog() {
+          restoreOverlayEl.classList.add("is-open");
+          restoreListEl.innerHTML = '<div class="restore-empty">Loading checkpoints...</div>';
+          vscode.postMessage({ type: "loadCheckpoints" });
+        }
+        function closeRestoreDialog() {
+          restoreOverlayEl.classList.remove("is-open");
+        }
+        restoreDialogCloseEl.addEventListener("click", closeRestoreDialog);
+        restoreOverlayEl.addEventListener("click", function (event) {
+          if (event.target === restoreOverlayEl) {
+            closeRestoreDialog();
+          }
+        });
+
+        function renderCheckpointList(items) {
+          restoreListEl.innerHTML = "";
+          if (!Array.isArray(items) || !items.length) {
+            const empty = document.createElement("div");
+            empty.className = "restore-empty";
+            empty.textContent = "No cloud checkpoints found for this account.";
+            restoreListEl.appendChild(empty);
+            return;
+          }
+          for (const item of items) {
+            const card = document.createElement("div");
+            card.className = "restore-card";
+            card.tabIndex = 0;
+
+            const title = document.createElement("div");
+            title.className = "restore-card-title";
+            title.textContent = item.title || "Checkpoint";
+            card.appendChild(title);
+
+            const meta = document.createElement("div");
+            meta.className = "restore-card-meta";
+            const metaParts = [];
+            if (item.workspaceLabel || item.workspaceKey) {
+              metaParts.push(item.workspaceLabel || item.workspaceKey);
+            }
+            if (item.deviceName || item.deviceId) {
+              metaParts.push(item.deviceName || item.deviceId);
+            }
+            if (item.createdAt) {
+              const d = new Date(item.createdAt);
+              if (!Number.isNaN(d.getTime())) {
+                metaParts.push(d.toLocaleString());
+              }
+            }
+            meta.textContent = metaParts.join(" \\u00b7 ");
+            card.appendChild(meta);
+
+            const summary = document.createElement("div");
+            summary.className = "restore-card-summary";
+            const text = String(item.summary || "").replace(/\\s+/g, " ").trim();
+            summary.textContent = text ? (text.length > 200 ? text.slice(0, 197) + "..." : text) : "No summary";
+            card.appendChild(summary);
+
+            const trigger = function () {
+              if (!item.checkpointId) return;
+              restoreListEl.innerHTML = '<div class="restore-empty">Restoring...</div>';
+              vscode.postMessage({ type: "restoreCheckpointById", value: { checkpointId: item.checkpointId } });
+            };
+            card.addEventListener("click", trigger);
+            card.addEventListener("keydown", function (event) {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                trigger();
+              }
+            });
+
+            restoreListEl.appendChild(card);
+          }
+        }
+
+        document.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            if (authOverlayEl.classList.contains("is-open")) {
+              closeAuthDialog();
+            }
+            if (restoreOverlayEl.classList.contains("is-open")) {
+              closeRestoreDialog();
+            }
+          }
+        });
 
         function scrollToBottom() {
           messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1180,6 +1715,28 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           vscode.postMessage({ type: "newSession" });
         });
 
+        signInButton.addEventListener("click", function () {
+          openAuthDialog("signin");
+        });
+
+        registerButton.addEventListener("click", function () {
+          openAuthDialog("register");
+        });
+
+        signOutButton.addEventListener("click", function () {
+          statusEl.textContent = "Signing out...";
+          vscode.postMessage({ type: "authSignOut" });
+        });
+
+        restoreButton.addEventListener("click", function () {
+          openRestoreDialog();
+        });
+
+        workspaceButton.addEventListener("click", function () {
+          statusEl.textContent = "Selecting workspace...";
+          vscode.postMessage({ type: "selectWorkspace" });
+        });
+
         promptEl.addEventListener("input", function () {
           saveCurrentDraft();
         });
@@ -1303,6 +1860,40 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             return;
           }
 
+          if (message.type === "authState") {
+            renderAuthState(message.value || {});
+            statusEl.textContent = "Ready.";
+            return;
+          }
+
+          if (message.type === "authResult") {
+            const value = message.value || {};
+            setAuthBusy(false);
+            if (value.ok) {
+              closeAuthDialog();
+              statusEl.textContent = value.message || "Signed in.";
+            } else {
+              showAuthError(value.error || "Authentication failed.");
+            }
+            return;
+          }
+
+          if (message.type === "checkpointList") {
+            renderCheckpointList(message.value || []);
+            return;
+          }
+
+          if (message.type === "checkpointRestoreResult") {
+            const value = message.value || {};
+            if (value.ok) {
+              closeRestoreDialog();
+              statusEl.textContent = value.message || "Checkpoint restored.";
+            } else {
+              restoreListEl.innerHTML = '<div class="restore-empty">' + escapeHtml(value.error || "Failed to restore checkpoint.") + '</div>';
+            }
+            return;
+          }
+
           if (message.type === "sessionList") {
             if (!acceptSessionSyncMessage(message)) {
               return;
@@ -1335,6 +1926,7 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         });
 
         statusEl.textContent = "Ready.";
+        renderAuthState(authState);
         vscode.postMessage({ type: "ready" });
       })();
     </script>

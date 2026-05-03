@@ -550,6 +550,8 @@ class MemoryManager {
     const preferences = await this.userStore.getPreferences();
     const workspaceKey = createWorkspaceSyncKey(workspaceRoot, workspace && workspace.detected ? workspace.detected : null);
     const traceSummary = trace ? summarizeRunTrace(trace) : summarizeRunTrace(session && session.lastRunTrace ? session.lastRunTrace : null);
+    const historyItems = session && Array.isArray(session.history) ? session.history : [];
+    const cappedHistory = historyItems.length > 200 ? historyItems.slice(-200) : historyItems;
 
     const payload = {
       tenantId: this.currentIdentity.tenantId,
@@ -565,6 +567,7 @@ class MemoryManager {
       lastPrompt: session && session.lastPrompt ? session.lastPrompt : "",
       lastTurn: session && session.lastTurn ? session.lastTurn : null,
       messageCount: session && typeof session.messageCount === "number" ? session.messageCount : 0,
+      history: cappedHistory,
       lastRunTrace: traceSummary,
       task: task
         ? {
@@ -672,7 +675,7 @@ class MemoryManager {
     }
   }
 
-  async listRestoreCheckpoints({ limit = 10 } = {}) {
+  async listRestoreCheckpoints({ limit = 10, allWorkspaces = false } = {}) {
     if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
       return [];
     }
@@ -686,7 +689,7 @@ class MemoryManager {
       return await this.sessionSyncClient.listRestoreCheckpoints({
         tenantId: this.currentIdentity.tenantId,
         userId: this.currentIdentity.userId,
-        workspaceKey,
+        workspaceKey: allWorkspaces ? "" : workspaceKey,
         limit,
       });
     } catch (error) {
@@ -735,6 +738,10 @@ class MemoryManager {
       lastRunTrace: payload.lastRunTrace || null,
       messageCount: payload.messageCount || 0,
     });
+
+    if (Array.isArray(payload.history) && payload.history.length) {
+      await this.sessionStore.setHistory(sessionId, payload.history, payload.lastPrompt || "");
+    }
 
     if (payload.task) {
       const syncedTask = await this.taskStore.upsertSyncedTask({

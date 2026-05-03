@@ -3,6 +3,7 @@ class ChatController {
     this.vscode = options.vscode;
     this.runtime = options.runtime;
     this.getWorkspaceDescription = options.getWorkspaceDescription;
+    this.getAuthState = options.getAuthState;
     this.getEditorContext = options.getEditorContext;
     this.openChatView = options.openChatView;
     this.postToChatView = options.postToChatView;
@@ -23,6 +24,9 @@ class ChatController {
     this.createNewSession = options.createNewSession;
     this.switchSession = options.switchSession;
     this.deleteSession = options.deleteSession;
+    this.handleAuthSubmit = options.handleAuthSubmit || null;
+    this.handleLoadCheckpoints = options.handleLoadCheckpoints || null;
+    this.handleRestoreCheckpointById = options.handleRestoreCheckpointById || null;
     this.sessionSyncVersion = 0;
   }
 
@@ -31,6 +35,12 @@ class ChatController {
       type: "workspace",
       value: this.getWorkspaceDescription(),
     });
+    if (this.getAuthState) {
+      this.postToChatView({
+        type: "authState",
+        value: this.getAuthState(),
+      });
+    }
     await this.syncSessionUi();
 
     const pendingPrefill = this.getPendingPrefill();
@@ -125,6 +135,12 @@ class ChatController {
 
   async handleWebviewMessage(message) {
     if (message.type === "ready") {
+      if (this.getAuthState) {
+        this.postToChatView({
+          type: "authState",
+          value: this.getAuthState(),
+        });
+      }
       await this.syncSessionUi();
       return;
     }
@@ -207,6 +223,52 @@ class ChatController {
 
     if (message.type === "insertLastReply") {
       await this.vscode.commands.executeCommand("localAgent.applyLastReply");
+      return;
+    }
+
+    if (message.type === "authSignIn") {
+      await this.vscode.commands.executeCommand("localAgent.signIn");
+      return;
+    }
+
+    if (message.type === "authRegister") {
+      await this.vscode.commands.executeCommand("localAgent.register");
+      return;
+    }
+
+    if (message.type === "authSignOut") {
+      await this.vscode.commands.executeCommand("localAgent.signOut");
+      return;
+    }
+
+    if (message.type === "authSubmit") {
+      if (this.handleAuthSubmit) {
+        await this.handleAuthSubmit(message.value || {});
+      }
+      return;
+    }
+
+    if (message.type === "loadCheckpoints") {
+      if (this.handleLoadCheckpoints) {
+        await this.handleLoadCheckpoints();
+      }
+      return;
+    }
+
+    if (message.type === "restoreCheckpointById") {
+      if (this.handleRestoreCheckpointById) {
+        await this.handleRestoreCheckpointById((message.value || {}).checkpointId || "");
+      }
+      return;
+    }
+
+    if (message.type === "restoreCheckpoint") {
+      await this.vscode.commands.executeCommand("localAgent.restoreCheckpoint");
+      return;
+    }
+
+    if (message.type === "selectWorkspace") {
+      await this.vscode.commands.executeCommand("localAgent.selectWorkspaceFolder");
     }
   }
 
