@@ -708,8 +708,6 @@ function getWebviewHtml({ logoUri = "" } = {}) {
       .restore-list {
         display: grid;
         gap: 8px;
-        max-height: 360px;
-        overflow-y: auto;
       }
       .restore-empty {
         font-size: 12px;
@@ -744,6 +742,99 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         opacity: 0.85;
         line-height: 1.45;
       }
+      .ck-tree {
+        display: grid;
+        gap: 6px;
+        padding-right: 4px;
+      }
+      .ck-workspace {
+        border: 1px solid var(--mochi-border);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent);
+        overflow: hidden;
+      }
+      .ck-workspace-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--mochi-accent) 8%, transparent);
+        border-bottom: 1px solid transparent;
+        user-select: none;
+      }
+      .ck-workspace.is-open > .ck-workspace-header {
+        border-bottom-color: var(--mochi-border);
+      }
+      .ck-caret {
+        display: inline-block;
+        width: 10px;
+        text-align: center;
+        opacity: 0.7;
+        transition: transform 120ms ease;
+      }
+      .ck-workspace.is-open > .ck-workspace-header > .ck-caret { transform: rotate(90deg); }
+      .ck-session.is-open > .ck-session-header > .ck-caret { transform: rotate(90deg); }
+      .ck-workspace-meta { margin-left: auto; font-size: 11px; opacity: 0.65; font-weight: 400; }
+      .ck-sessions { display: none; padding: 4px 6px 8px 18px; }
+      .ck-workspace.is-open > .ck-sessions { display: block; }
+      .ck-session {
+        margin-top: 4px;
+        border-left: 2px solid color-mix(in srgb, var(--mochi-accent) 40%, var(--mochi-border) 60%);
+        padding-left: 8px;
+      }
+      .ck-session-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        cursor: pointer;
+        font-size: 12px;
+        user-select: none;
+        border-radius: 6px;
+      }
+      .ck-session-header:hover { background: color-mix(in srgb, var(--mochi-accent) 10%, transparent); }
+      .ck-session-title { font-weight: 600; }
+      .ck-session-meta { margin-left: auto; font-size: 11px; opacity: 0.65; font-weight: 400; }
+      .ck-devices { display: none; padding: 4px 0 6px 14px; }
+      .ck-session.is-open > .ck-devices { display: block; }
+      .ck-device {
+        margin-top: 6px;
+      }
+      .ck-device-label {
+        font-size: 11px;
+        opacity: 0.7;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+      .ck-checkpoint-line {
+        position: relative;
+        padding: 6px 8px 6px 16px;
+        margin-left: 4px;
+        border-left: 1px dashed color-mix(in srgb, var(--mochi-accent) 35%, transparent);
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: 12px;
+        line-height: 1.4;
+        display: grid;
+        gap: 2px;
+      }
+      .ck-checkpoint-line::before {
+        content: "";
+        position: absolute;
+        left: -4px;
+        top: 11px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--mochi-accent);
+        box-shadow: 0 0 0 2px var(--vscode-editor-background);
+      }
+      .ck-checkpoint-line:hover { background: color-mix(in srgb, var(--mochi-accent) 12%, transparent); }
+      .ck-checkpoint-line.is-latest::before { background: #2f7d4d; }
+      .ck-cp-meta { font-size: 10px; opacity: 0.65; }
     </style>
   </head>
   <body>
@@ -1024,8 +1115,9 @@ function getWebviewHtml({ logoUri = "" } = {}) {
 
         function openRestoreDialog() {
           restoreOverlayEl.classList.add("is-open");
+          restoreListEl.className = "restore-list";
           restoreListEl.innerHTML = '<div class="restore-empty">Loading checkpoints...</div>';
-          vscode.postMessage({ type: "loadCheckpoints" });
+          vscode.postMessage({ type: "loadCheckpointTree" });
         }
         function closeRestoreDialog() {
           restoreOverlayEl.classList.remove("is-open");
@@ -1037,64 +1129,134 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           }
         });
 
-        function renderCheckpointList(items) {
+        function formatCheckpointTime(value) {
+          if (!value) return "";
+          const d = new Date(value);
+          if (Number.isNaN(d.getTime())) return "";
+          return d.toLocaleString();
+        }
+
+        function buildCheckpointLine(cp, isLatest) {
+          const line = document.createElement("div");
+          line.className = "ck-checkpoint-line" + (isLatest ? " is-latest" : "");
+          line.tabIndex = 0;
+          line.title = cp.summary || cp.title || "";
+
+          const titleSpan = document.createElement("div");
+          titleSpan.textContent = cp.title || "Checkpoint";
+          line.appendChild(titleSpan);
+
+          const meta = document.createElement("div");
+          meta.className = "ck-cp-meta";
+          meta.textContent = formatCheckpointTime(cp.createdAt) + (isLatest ? "  \\u2022 latest" : "");
+          line.appendChild(meta);
+
+          const trigger = function () {
+            if (!cp.checkpointId) return;
+            restoreListEl.innerHTML = '<div class="restore-empty">Restoring...</div>';
+            vscode.postMessage({ type: "restoreCheckpointById", value: { checkpointId: cp.checkpointId } });
+          };
+          line.addEventListener("click", trigger);
+          line.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              trigger();
+            }
+          });
+          return line;
+        }
+
+        function renderCheckpointTree(tree) {
+          restoreListEl.className = "ck-tree";
           restoreListEl.innerHTML = "";
-          if (!Array.isArray(items) || !items.length) {
+          if (!Array.isArray(tree) || !tree.length) {
             const empty = document.createElement("div");
             empty.className = "restore-empty";
             empty.textContent = "No cloud checkpoints found for this account.";
             restoreListEl.appendChild(empty);
             return;
           }
-          for (const item of items) {
-            const card = document.createElement("div");
-            card.className = "restore-card";
-            card.tabIndex = 0;
 
-            const title = document.createElement("div");
-            title.className = "restore-card-title";
-            title.textContent = item.title || "Checkpoint";
-            card.appendChild(title);
+          tree.forEach(function (workspace, wsIdx) {
+            const wsEl = document.createElement("div");
+            wsEl.className = "ck-workspace" + (wsIdx === 0 ? " is-open" : "");
 
-            const meta = document.createElement("div");
-            meta.className = "restore-card-meta";
-            const metaParts = [];
-            if (item.workspaceLabel || item.workspaceKey) {
-              metaParts.push(item.workspaceLabel || item.workspaceKey);
-            }
-            if (item.deviceName || item.deviceId) {
-              metaParts.push(item.deviceName || item.deviceId);
-            }
-            if (item.createdAt) {
-              const d = new Date(item.createdAt);
-              if (!Number.isNaN(d.getTime())) {
-                metaParts.push(d.toLocaleString());
-              }
-            }
-            meta.textContent = metaParts.join(" \\u00b7 ");
-            card.appendChild(meta);
+            const wsHeader = document.createElement("div");
+            wsHeader.className = "ck-workspace-header";
+            const caret1 = document.createElement("span");
+            caret1.className = "ck-caret";
+            caret1.textContent = "\\u25B6";
+            wsHeader.appendChild(caret1);
+            const wsLabel = document.createElement("span");
+            wsLabel.textContent = workspace.workspaceLabel || workspace.workspaceKey || "Workspace";
+            wsHeader.appendChild(wsLabel);
+            const wsMeta = document.createElement("span");
+            wsMeta.className = "ck-workspace-meta";
+            const sessionCount = (workspace.sessions || []).length;
+            wsMeta.textContent = sessionCount + (sessionCount === 1 ? " session" : " sessions");
+            wsHeader.appendChild(wsMeta);
+            wsHeader.addEventListener("click", function () { wsEl.classList.toggle("is-open"); });
+            wsEl.appendChild(wsHeader);
 
-            const summary = document.createElement("div");
-            summary.className = "restore-card-summary";
-            const text = String(item.summary || "").replace(/\\s+/g, " ").trim();
-            summary.textContent = text ? (text.length > 200 ? text.slice(0, 197) + "..." : text) : "No summary";
-            card.appendChild(summary);
+            const sessionsBox = document.createElement("div");
+            sessionsBox.className = "ck-sessions";
 
-            const trigger = function () {
-              if (!item.checkpointId) return;
-              restoreListEl.innerHTML = '<div class="restore-empty">Restoring...</div>';
-              vscode.postMessage({ type: "restoreCheckpointById", value: { checkpointId: item.checkpointId } });
-            };
-            card.addEventListener("click", trigger);
-            card.addEventListener("keydown", function (event) {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                trigger();
-              }
+            (workspace.sessions || []).forEach(function (session, sIdx) {
+              const sEl = document.createElement("div");
+              sEl.className = "ck-session" + (wsIdx === 0 && sIdx === 0 ? " is-open" : "");
+
+              const sHeader = document.createElement("div");
+              sHeader.className = "ck-session-header";
+              const caret2 = document.createElement("span");
+              caret2.className = "ck-caret";
+              caret2.textContent = "\\u25B6";
+              sHeader.appendChild(caret2);
+              const sTitle = document.createElement("span");
+              sTitle.className = "ck-session-title";
+              sTitle.textContent = session.title || session.baseSessionId || "Session";
+              sHeader.appendChild(sTitle);
+              const sMeta = document.createElement("span");
+              sMeta.className = "ck-session-meta";
+              sMeta.textContent = session.checkpointCount + (session.checkpointCount === 1 ? " checkpoint" : " checkpoints");
+              sHeader.appendChild(sMeta);
+              sHeader.addEventListener("click", function () { sEl.classList.toggle("is-open"); });
+              sEl.appendChild(sHeader);
+
+              const devicesBox = document.createElement("div");
+              devicesBox.className = "ck-devices";
+
+              // Find latest checkpoint id across all devices in this session
+              let latestId = "";
+              let latestAt = "";
+              (session.devices || []).forEach(function (dev) {
+                (dev.checkpoints || []).forEach(function (cp) {
+                  if (String(cp.createdAt) > String(latestAt)) {
+                    latestAt = cp.createdAt;
+                    latestId = cp.checkpointId;
+                  }
+                });
+              });
+
+              (session.devices || []).forEach(function (dev) {
+                const devEl = document.createElement("div");
+                devEl.className = "ck-device";
+                const devLabel = document.createElement("div");
+                devLabel.className = "ck-device-label";
+                devLabel.textContent = "\\uD83D\\uDCBB " + (dev.deviceName || dev.deviceId || "Device");
+                devEl.appendChild(devLabel);
+                (dev.checkpoints || []).forEach(function (cp) {
+                  devEl.appendChild(buildCheckpointLine(cp, cp.checkpointId === latestId));
+                });
+                devicesBox.appendChild(devEl);
+              });
+
+              sEl.appendChild(devicesBox);
+              sessionsBox.appendChild(sEl);
             });
 
-            restoreListEl.appendChild(card);
-          }
+            wsEl.appendChild(sessionsBox);
+            restoreListEl.appendChild(wsEl);
+          });
         }
 
         document.addEventListener("keydown", function (event) {
@@ -1878,8 +2040,8 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             return;
           }
 
-          if (message.type === "checkpointList") {
-            renderCheckpointList(message.value || []);
+          if (message.type === "checkpointTree") {
+            renderCheckpointTree(message.value || []);
             return;
           }
 

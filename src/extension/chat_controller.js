@@ -248,7 +248,7 @@ class ChatController {
       return;
     }
 
-    if (message.type === "loadCheckpoints") {
+    if (message.type === "loadCheckpoints" || message.type === "loadCheckpointTree") {
       if (this.handleLoadCheckpoints) {
         await this.handleLoadCheckpoints();
       }

@@ -406,6 +406,56 @@ function renderDashboardHtml() {
       color: var(--muted);
     }
 
+    .ck-tree { display: grid; gap: 10px; }
+    .ck-workspace {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 253, 248, 0.86);
+      overflow: hidden;
+    }
+    .ck-workspace-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; cursor: pointer; font-weight: 600; user-select: none;
+      background: rgba(0,0,0,0.03);
+    }
+    .ck-caret { display:inline-block; width:12px; opacity:.7; transition: transform 120ms ease; }
+    .ck-workspace.is-open > .ck-workspace-header > .ck-caret { transform: rotate(90deg); }
+    .ck-session.is-open > .ck-session-header > .ck-caret { transform: rotate(90deg); }
+    .ck-meta-right { margin-left:auto; font-size:12px; color: var(--muted); font-weight: 400; }
+    .ck-sessions { display:none; padding: 6px 14px 12px 28px; }
+    .ck-workspace.is-open > .ck-sessions { display: block; }
+    .ck-session {
+      margin-top: 6px;
+      border-left: 2px solid rgba(0,0,0,0.12);
+      padding-left: 10px;
+    }
+    .ck-session-header {
+      display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;
+      border-radius: 6px; user-select: none;
+    }
+    .ck-session-header:hover { background: rgba(0,0,0,0.04); }
+    .ck-session-title { font-weight: 600; }
+    .ck-devices { display:none; padding: 4px 0 6px 16px; }
+    .ck-session.is-open > .ck-devices { display: block; }
+    .ck-device { margin-top: 8px; }
+    .ck-device-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .ck-checkpoint-line {
+      position: relative;
+      padding: 6px 10px 6px 18px;
+      margin-left: 4px;
+      border-left: 1px dashed rgba(0,0,0,0.18);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .ck-checkpoint-line::before {
+      content: ""; position: absolute; left: -5px; top: 11px;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--accent, #6c63ff);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.86);
+    }
+    .ck-checkpoint-line.is-latest::before { background: #2f7d4d; }
+    .ck-cp-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -818,6 +868,93 @@ function renderDashboardHtml() {
       }).join('');
     }
 
+    function renderCheckpointTree(tree) {
+      if (!state.authUser) {
+        checkpointList.innerHTML = '<div class="empty">Checkpoints are private. Log in to load them.</div>';
+        return;
+      }
+      if (!Array.isArray(tree) || !tree.length) {
+        checkpointList.innerHTML = '<div class="empty">No checkpoints yet. Finish a signed-in plugin run and a cloud checkpoint will appear here automatically.</div>';
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'ck-tree';
+
+      tree.forEach((workspace, wsIdx) => {
+        const wsEl = document.createElement('div');
+        wsEl.className = 'ck-workspace' + (wsIdx === 0 ? ' is-open' : '');
+
+        const wsHeader = document.createElement('div');
+        wsHeader.className = 'ck-workspace-header';
+        wsHeader.innerHTML =
+          '<span class="ck-caret">\u25B6</span>'
+          + '<span>' + escapeHtml(workspace.workspaceLabel || workspace.workspaceKey || 'Workspace') + '</span>'
+          + '<span class="ck-meta-right">' + (workspace.sessions || []).length + ' session(s)</span>';
+        wsHeader.addEventListener('click', () => wsEl.classList.toggle('is-open'));
+        wsEl.appendChild(wsHeader);
+
+        const sessionsBox = document.createElement('div');
+        sessionsBox.className = 'ck-sessions';
+
+        (workspace.sessions || []).forEach((session, sIdx) => {
+          const sEl = document.createElement('div');
+          sEl.className = 'ck-session' + (wsIdx === 0 && sIdx === 0 ? ' is-open' : '');
+
+          const sHeader = document.createElement('div');
+          sHeader.className = 'ck-session-header';
+          sHeader.innerHTML =
+            '<span class="ck-caret">\u25B6</span>'
+            + '<span class="ck-session-title">' + escapeHtml(session.title || session.baseSessionId || 'Session') + '</span>'
+            + '<span class="ck-meta-right">' + session.checkpointCount + ' checkpoint(s) \u00b7 ' + (session.devices || []).length + ' device(s)</span>';
+          sHeader.addEventListener('click', () => sEl.classList.toggle('is-open'));
+          sEl.appendChild(sHeader);
+
+          const devicesBox = document.createElement('div');
+          devicesBox.className = 'ck-devices';
+
+          let latestId = '';
+          let latestAt = '';
+          (session.devices || []).forEach((dev) => {
+            (dev.checkpoints || []).forEach((cp) => {
+              if (String(cp.createdAt) > String(latestAt)) {
+                latestAt = cp.createdAt;
+                latestId = cp.checkpointId;
+              }
+            });
+          });
+
+          (session.devices || []).forEach((dev) => {
+            const devEl = document.createElement('div');
+            devEl.className = 'ck-device';
+            const label = document.createElement('div');
+            label.className = 'ck-device-label';
+            label.textContent = '\uD83D\uDCBB ' + (dev.deviceName || dev.deviceId || 'Device');
+            devEl.appendChild(label);
+            (dev.checkpoints || []).forEach((cp) => {
+              const line = document.createElement('div');
+              line.className = 'ck-checkpoint-line' + (cp.checkpointId === latestId ? ' is-latest' : '');
+              line.title = cp.summary || cp.title || '';
+              line.innerHTML =
+                '<div>' + escapeHtml(cp.title || 'Checkpoint') + '</div>'
+                + '<div class="ck-cp-meta">' + escapeHtml(formatDate(cp.createdAt)) + (cp.checkpointId === latestId ? ' \u2022 latest' : '') + '</div>';
+              devEl.appendChild(line);
+            });
+            devicesBox.appendChild(devEl);
+          });
+
+          sEl.appendChild(devicesBox);
+          sessionsBox.appendChild(sEl);
+        });
+
+        wsEl.appendChild(sessionsBox);
+        container.appendChild(wsEl);
+      });
+
+      checkpointList.innerHTML = '';
+      checkpointList.appendChild(container);
+    }
+
     function renderChangeSummaries(changes) {
       if (!changes.length) {
         changeSummaryList.innerHTML = '<div class="empty">No change summaries yet. Run Mochi on a code-editing task to populate this feed.</div>';
@@ -994,15 +1131,14 @@ function renderDashboardHtml() {
         return;
       }
 
-      const params = new URLSearchParams();
-      if (deviceFilter.value) params.set('deviceId', deviceFilter.value);
-      if (workspaceFilter.value) params.set('workspaceKey', workspaceFilter.value);
-      params.set('limit', '12');
-      const query = params.toString();
-      const response = await fetchJson('/api/v1/checkpoints' + (query ? '?' + query : ''), {
-        headers: authHeaders()
-      });
-      renderCheckpoints(response.checkpoints || []);
+      try {
+        const response = await fetchJson('/api/v1/restore/tree?limit=200', {
+          headers: authHeaders()
+        });
+        renderCheckpointTree(response.tree || []);
+      } catch (error) {
+        renderCheckpoints([]);
+      }
     }
 
     async function handleLogin(event) {

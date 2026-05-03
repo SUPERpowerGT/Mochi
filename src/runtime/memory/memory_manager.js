@@ -697,6 +697,21 @@ class MemoryManager {
     }
   }
 
+  async listRestoreTree({ limit = 200 } = {}) {
+    if (!this.sessionSyncClient || !this.sessionSyncClient.enabled) {
+      return [];
+    }
+    try {
+      return await this.sessionSyncClient.fetchRestoreTree({
+        tenantId: this.currentIdentity.tenantId,
+        userId: this.currentIdentity.userId,
+        limit,
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
   async restoreCheckpoint(checkpointId) {
     if (!this.sessionSyncClient || !this.sessionSyncClient.enabled || !checkpointId) {
       return null;

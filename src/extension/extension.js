@@ -1073,23 +1073,23 @@ async function handleWebviewAuthSubmit(context, runtime, payload) {
 async function handleWebviewLoadCheckpoints(runtime) {
   if (!getActiveAuthToken()) {
     postToChatView({
-      type: "checkpointList",
+      type: "checkpointTree",
       value: [],
     });
     return;
   }
 
   try {
-    const checkpoints = runtime.listRestoreCheckpoints
-      ? await runtime.listRestoreCheckpoints({ limit: 20, allWorkspaces: true })
+    const tree = runtime.listRestoreTree
+      ? await runtime.listRestoreTree({ limit: 200 })
       : [];
     postToChatView({
-      type: "checkpointList",
-      value: Array.isArray(checkpoints) ? checkpoints : [],
+      type: "checkpointTree",
+      value: Array.isArray(tree) ? tree : [],
     });
   } catch (error) {
     postToChatView({
-      type: "checkpointList",
+      type: "checkpointTree",
       value: [],
     });
     vscode.window.showErrorMessage(error && error.message ? error.message : String(error));

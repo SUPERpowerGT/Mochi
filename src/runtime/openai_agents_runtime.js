@@ -241,6 +241,10 @@ class OpenAIAgentsRuntime {
     return this.memoryManager.listRestoreCheckpoints(options);
   }
 
+  async listRestoreTree(options = {}) {
+    return this.memoryManager.listRestoreTree(options);
+  }
+
   async restoreCheckpoint(checkpointId) {
     return this.memoryManager.restoreCheckpoint(checkpointId);
   }
