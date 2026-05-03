@@ -3,6 +3,11 @@
   <p><code>local-first · multi-agent · memory-aware</code></p>
   <p><strong>A local-first AI coding agent for VS Code with workspace tools, session memory, and approval-aware edits.</strong></p>
   <p>
+    <a href="README.md">English</a>
+    ·
+    <a href="README.zh.md">中文</a>
+  </p>
+  <p>
     <a href="https://marketplace.visualstudio.com/items?itemName=zee.mochi-local-agent">VS Code Marketplace</a>
     ·
     <a href="https://github.com/SUPERpowerGT/Mochi">GitHub</a>
@@ -34,9 +39,10 @@ If the video does not render in your Markdown viewer, open `media/video-demo.mp4
 - Rolling session summaries that compact older history while keeping recent turns available for context.
 - Workspace memory that records detected project facts and suggested verification commands.
 - Project instruction loading from `MOCHI.md`, `AGENTS.md`, and `CLAUDE.md` style files when present.
-- Memory snapshots and run traces for debugging what Mochi remembered, which tools ran, and what changed.
+- Memory snapshots, run traces, MemoryCommit records, and memory events for debugging what Mochi remembered, skipped, archived, and changed.
 - Memory controls for viewing local memory, private current-window mode, isolating a window from other sessions, disabling persistent memory reads, and clearing current or all local memory.
 - Private mode is exposed directly in the chat panel as a current-window toggle; the slash menu stays small and only exposes high-frequency shortcuts.
+- Long-Term Memory records are stored locally, including non-private `window_archive` records created when a window is archived and deleted.
 - Root-agent orchestration with delegated subagents for repository guidance, coding, plan review, and code review.
 - Role-specific tool permissions so exploratory and review agents stay read-only while the coding agent can edit.
 - Lightweight local skills that inject task-specific workflow guidance only when relevant.
@@ -131,9 +137,13 @@ Mochi can answer questions, inspect files, make workspace edits, and use the act
 
 For complex work, Mochi may delegate bounded subtasks to specialized subagents. Delegation remains visible in run traces, and subagents receive selected memory and skills rather than unrestricted long-term memory.
 
-Memory is user-visible and controllable. The product model has exactly three layers: Current Window Memory, Long-Term Memory, and Runtime Trace. The chat panel has a `Private` toggle for browser-private-window style work that uses only the current window context and skips saved memory reads. Run `Mochi: Open Memory Controls` to inspect the current memory state. Use `Mochi: Delete Current Window Artifacts` to delete that window's chat, working state, trace, and routing artifacts. The older granular controls remain available from Memory Controls and the Command Palette during the transition.
+Memory is user-visible and controllable. The product model has exactly three layers: Current Window Memory, Long-Term Memory, and Runtime Trace. Current Window Memory keeps the active chat coherent; Long-Term Memory stores durable local records such as `window_archive`; Runtime Trace records evidence about tools, approvals, commands, subagents, and failures.
 
-The current implementation still has internal session, task-like working state, workspace, and user stores. The memory model is captured in `doc/memory-model.md` and `doc/memory-model.zh.md`; it defines the three layers, current storage locations, lifecycle, archive/delete rules, Private mode, and Memory Controller boundaries. User preference, project fact/convention, decision, and window archive are Long-Term Memory record kinds, not separate layers. Non-private windows should archive into a `window_archive` Long-Term Memory record when closed/deleted unless the user explicitly discards without archive. `doc/memory-v2.md` tracks the implementation plan.
+The chat panel has a `Private` toggle for browser-private-window style work. Private windows can keep their own current-window context while they are open, but they do not read saved memory from other windows and they do not archive into Long-Term Memory. Non-private window artifact deletion now archives safe current-window context into a local `kind: "window_archive"` Long-Term Memory record before deleting the current window artifacts. Private deletion records a blocked memory event instead.
+
+Run `Mochi: Open Memory Controls` to inspect the current memory state. Use `Mochi: Delete Current Window Artifacts` to archive and delete a non-private window, or discard a Private window without archive. The older granular controls remain available from Memory Controls and the Command Palette during the transition.
+
+The current implementation still has internal session, task-like working state, workspace, user, long-term memory, and memory event stores. The memory model is captured in `doc/memory-model.md` and `doc/memory-model.zh.md`; it defines the three layers, current storage locations, lifecycle, archive/delete rules, Private mode, and Memory Controller boundaries. User preference, project fact/convention, decision, and window archive are Long-Term Memory record kinds, not separate layers. `doc/memory-v2.md` tracks the JSON-backed implementation plan and current status.
 
 The current workflow is optimized for local development:
 
@@ -158,7 +168,7 @@ The current workflow is optimized for local development:
 | `Mochi: Toggle Current Window Private Mode` | Prevent reading saved memory and memory from other sessions in this window. |
 | `Mochi: Toggle Current Window Memory Isolation` | Prevent or allow reading memory from other sessions. |
 | `Mochi: Toggle Current Window Persistent Memory Reads` | Prevent or allow reading persistent memory in the current window. |
-| `Mochi: Delete Current Window Artifacts` | Delete the current window's chat, working state, trace, and routing artifacts. |
+| `Mochi: Delete Current Window Artifacts` | Archive and delete a non-private window's chat, working state, trace, and routing artifacts; Private windows are discarded without archive. |
 | `Mochi: Clear Current Window Memory` | Clear summaries, working state, traces, and routing memory for the current window while keeping chat messages. |
 | `Mochi: Clear Current Session Summary Memory` | Clear the current session summary and compaction memory. |
 | `Mochi: Clear Current Window Working State` | Transitional internal command for clearing current working-state records. |
@@ -193,7 +203,8 @@ Mochi treats the workspace as shared state:
 - Run traces capture tool calls, approvals, changed paths, command evidence, and verification status.
 - Current-window isolation prevents cross-session memory recall.
 - Persistent memory reads can be disabled per current window.
-- Private mode blocks persistent memory reads and cross-session recall for the current window.
+- Private mode blocks persistent memory reads, cross-session recall, and Long-Term Memory archive writes for the current window.
+- Memory events record completed, skipped, and blocked memory decisions such as non-private archive creation or Private archive blocking.
 - Users can clear the current window's memory or all local Mochi memory.
 
 This makes the extension useful for real local work while keeping potentially surprising actions visible.
