@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 const { JsonFileStore } = require("./json_file_store");
 const { nowIso } = require("./memory_utils");
 const { normalizeRootPath, resolveChildFilename } = require("../support/safe_paths");
@@ -238,6 +239,24 @@ class WorkspaceStore {
     });
 
     return data.workspaces[workspaceId];
+  }
+
+  async clearWorkspace(workspaceId) {
+    const data = await this.store.update((current) => {
+      if (workspaceId && current.workspaces) {
+        delete current.workspaces[workspaceId];
+      }
+      return current;
+    });
+
+    return data.workspaces || {};
+  }
+
+  async resetAllWorkspaces() {
+    return this.store.write({
+      version: 1,
+      workspaces: {},
+    });
   }
 }
 

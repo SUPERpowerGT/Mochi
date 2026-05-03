@@ -3,6 +3,7 @@
 const { execFile } = require("child_process");
 const path = require("path");
 const { promisify } = require("util");
+const { writeAuditEvent } = require("../src/runtime/support/audit_logger");
 
 const execFileAsync = promisify(execFile);
 
@@ -73,8 +74,30 @@ async function main() {
 
   if (!response.ok) {
     const text = await response.text();
+    await writeCommitAuditEvent(workspaceRoot, {
+      event: "commit_security_report_upload_failed",
+      level: "error",
+      workspaceKey,
+      workspaceLabel,
+      commitHash: payload.commitHash,
+      branchName: payload.branchName,
+      riskLevel,
+      findingCount: findings.length,
+      statusCode: response.status,
+      errorMessage: text || String(response.status),
+    });
     throw new Error(`Failed to upload commit security report: ${text || response.status}`);
   }
+
+  await writeCommitAuditEvent(workspaceRoot, {
+    event: "commit_security_report_uploaded",
+    workspaceKey,
+    workspaceLabel,
+    commitHash: payload.commitHash,
+    branchName: payload.branchName,
+    riskLevel,
+    findingCount: findings.length,
+  });
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
@@ -91,6 +114,12 @@ async function runGitCommand(args, cwd) {
     windowsHide: true,
     maxBuffer: 1024 * 1024 * 8,
   });
+}
+
+async function writeCommitAuditEvent(workspaceRoot, event) {
+  await writeAuditEvent(event, {
+    storageRoot: path.join(workspaceRoot, ".mochi"),
+  }).catch(() => null);
 }
 
 async function readMochiGitConfig(cwd) {
@@ -239,7 +268,17 @@ function normalizeBaseUrl(value) {
   return text.endsWith("/") ? text.slice(0, -1) : text;
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.message || String(error)}\n`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    process.stderr.write(`${error.message || String(error)}\n`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  analyzeCommitDiff,
+  buildSecuritySummary,
+  deriveRiskLevel,
+  normalizeBaseUrl,
+  parseArgs,
+};

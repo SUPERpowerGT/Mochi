@@ -162,6 +162,31 @@ class SessionStore {
     });
   }
 
+  async clearSessionMemory(sessionId) {
+    return this.updateSession(sessionId, (session) => {
+      clearMemoryFields(session);
+    });
+  }
+
+  async clearSessionSummaryMemory(sessionId) {
+    return this.updateSession(sessionId, (session) => {
+      session.summary = "";
+      session.summaryUpdatedAt = null;
+      session.compactedAt = null;
+      session.compaction = null;
+      session.lastPrompt = "";
+    });
+  }
+
+  async clearSessionTraceAndRoutingMemory(sessionId) {
+    return this.updateSession(sessionId, (session) => {
+      session.lastTurn = null;
+      session.lastRunTrace = null;
+      session.activeTaskId = null;
+      session.focusedTaskId = null;
+    });
+  }
+
   async getSession(sessionId) {
     const data = await this.store.update((current) => {
       const session = current.sessions[sessionId];
@@ -189,6 +214,39 @@ class SessionStore {
 
   async deleteSession(sessionId) {
     return this.closeSession(sessionId);
+  }
+
+  async deleteSessionRecord(sessionId) {
+    const data = await this.store.update((current) => {
+      if (current.sessions && sessionId) {
+        delete current.sessions[sessionId];
+      }
+      return current;
+    });
+
+    return data.sessions || {};
+  }
+
+  async resetAllSessions() {
+    return this.store.write({
+      version: 1,
+      sessions: {},
+    });
+  }
+
+  async clearAllSessionMemory() {
+    return this.store.update((current) => {
+      const sessions = current.sessions || {};
+      for (const session of Object.values(sessions)) {
+        if (!session) {
+          continue;
+        }
+        clearMemoryFields(session);
+        this.normalizeSession(session);
+        session.updatedAt = nowIso();
+      }
+      return current;
+    });
   }
 
   async listSessionsForWorkspace(workspaceId, options = {}) {
@@ -249,6 +307,18 @@ class SessionStore {
     }
     return session;
   }
+}
+
+function clearMemoryFields(session) {
+  session.summary = "";
+  session.summaryUpdatedAt = null;
+  session.compactedAt = null;
+  session.compaction = null;
+  session.lastTurn = null;
+  session.lastRunTrace = null;
+  session.activeTaskId = null;
+  session.focusedTaskId = null;
+  session.lastPrompt = "";
 }
 
 module.exports = {

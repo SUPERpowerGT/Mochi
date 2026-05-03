@@ -1,0 +1,40 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const { getWebviewHtml } = require("../src/extension/webview_html");
+
+test("webview exposes a slash command menu in the chat composer", () => {
+  const html = getWebviewHtml({ logoUri: "logo.svg" });
+
+  assert.match(html, /id="slashMenu"/);
+  assert.doesNotMatch(html, /id="tools"/);
+  assert.match(html, /id="privateToggle"/);
+  assert.match(html, /class="private-toggle"/);
+  assert.match(html, /type: "togglePrivateWindow"/);
+  assert.match(html, /Type \/ for shortcuts/);
+  assert.match(html, /value === "help"/);
+  assert.doesNotMatch(html, /value === "help" \|\| value === "tools"/);
+  assert.match(html, /trimStart\(\)/);
+  assert.match(html, /event\.key === "\/"/);
+  assert.match(html, /addEventListener\("keyup"/);
+  assert.match(html, /function moveSlashActiveIndex/);
+  assert.match(html, /scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(html, /includes\(event\.key\)/);
+  assert.match(html, /type: "slashCommand"/);
+  assert.match(html, /name: "\/memory"/);
+  assert.match(html, /name: "\/clear-private-window"/);
+  assert.match(html, /name: "\/model"/);
+  assert.match(html, /name: "\/help"/);
+  assert.doesNotMatch(html, /name: "\/private"/);
+  assert.doesNotMatch(html, /name: "\/workspace"/);
+  assert.doesNotMatch(html, /name: "\/selection"/);
+  assert.doesNotMatch(html, /name: "\/insert"/);
+  assert.doesNotMatch(html, /name: "\/snapshot"/);
+  assert.doesNotMatch(html, /name: "\/memory-toggle"/);
+  assert.doesNotMatch(html, /name: "\/isolate"/);
+  assert.doesNotMatch(html, /name: "\/clear-memory"/);
+  assert.doesNotMatch(html, /name: "\/clear-task-memory"/);
+  assert.doesNotMatch(html, /name: "\/clear-workspace-memory"/);
+  assert.doesNotMatch(html, /name: "\/clear-user-memory"/);
+  assert.match(html, /function updateSlashMenu/);
+  assert.match(html, /function runSlashCommand/);
+});

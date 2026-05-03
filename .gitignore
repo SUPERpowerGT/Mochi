@@ -14,6 +14,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.mochi/
 .mochi/memory/
 .mochi/state/
 .mochi/storage/
@@ -25,6 +26,7 @@ pnpm-debug.log*
 # VS Code extension output
 out/
 dist/
+coverage/
 *.vsix
 
 # Media assets and docs (not needed in repo)
@@ -38,3 +40,6 @@ scripts/mock-*.json
 scripts/mochi-report.html
 scripts/Untitled-*.json
 mochi-report.html
+
+test-report.json
+test-report.md

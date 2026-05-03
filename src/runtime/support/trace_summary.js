@@ -149,11 +149,30 @@ function summarizeOutcome(trace) {
     return "Verification ran and passed.";
   }
 
+  if (hasDeniedApproval(trace)) {
+    return "Run completed with one or more denied tool approvals.";
+  }
+
   if (trace.status === "completed") {
     return "Run completed.";
   }
 
   return "Run status is unknown.";
+}
+
+function hasDeniedApproval(trace) {
+  const approvals = Array.isArray(trace.approvals) ? trace.approvals : [];
+  if (approvals.some((approval) => approval && approval.status === "denied")) {
+    return true;
+  }
+
+  const lifecycleEvents = Array.isArray(trace.lifecycleEvents) ? trace.lifecycleEvents : [];
+  if (lifecycleEvents.some((event) => event && event.policy && event.policy.approvalDenied)) {
+    return true;
+  }
+
+  const toolCalls = Array.isArray(trace.toolCalls) ? trace.toolCalls : [];
+  return toolCalls.some((toolCall) => isApprovalDeniedOutput(toolCall && toolCall.output));
 }
 
 function buildPolicyTimeline(lifecycleEvents) {

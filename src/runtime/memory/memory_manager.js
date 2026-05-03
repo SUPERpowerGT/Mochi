@@ -4,6 +4,8 @@ const { SessionStore } = require("./session_store");
 const { TaskStore } = require("./task_store");
 const { WorkspaceStore } = require("./workspace_store");
 const { UserStore } = require("./user_store");
+const { LongTermMemoryStore } = require("./long_term_memory_store");
+const { MemoryEventStore } = require("./memory_event_store");
 const { classifyTurn } = require("./turn_classifier");
 const { loadProjectInstructions } = require("../support/project_instructions");
 const { summarizeRunTrace } = require("../support/trace_summary");
@@ -55,6 +57,9 @@ class MemoryManager {
     this.taskStore = new TaskStore({ storageRoot: this.storageRoot });
     this.workspaceStore = new WorkspaceStore({ storageRoot: this.storageRoot });
     this.userStore = new UserStore({ storageRoot: this.storageRoot });
+    this.longTermMemoryStore = new LongTermMemoryStore({ storageRoot: this.storageRoot });
+    this.memoryEventStore = new MemoryEventStore({ storageRoot: this.storageRoot });
+    this.memoryPolicyByBaseSessionId = new Map();
   }
 
   setBaseSessionId(baseSessionId) {
@@ -82,6 +87,25 @@ class MemoryManager {
     }
   }
 
+  getMemoryPolicy(baseSessionId = this.baseSessionId) {
+    return {
+      isolateSession: false,
+      disablePersistentMemory: false,
+      privateWindow: false,
+      ...(this.memoryPolicyByBaseSessionId.get(baseSessionId || this.baseSessionId) || {}),
+    };
+  }
+
+  setMemoryPolicy(baseSessionId = this.baseSessionId, policy = {}) {
+    const key = baseSessionId || this.baseSessionId;
+    const nextPolicy = {
+      ...this.getMemoryPolicy(key),
+      ...(policy || {}),
+    };
+    this.memoryPolicyByBaseSessionId.set(key, nextPolicy);
+    return nextPolicy;
+  }
+
   async ensureCurrentSession() {
     const workspaceRoot = this.getWorkspaceRoot();
     const workspaceId = createWorkspaceId(workspaceRoot);
@@ -104,27 +128,34 @@ class MemoryManager {
     const workspaceId = createWorkspaceId(workspaceRoot);
     const baseSessionId = options.baseSessionId || this.baseSessionId;
     const sessionId = createSessionId(baseSessionId, workspaceId);
+    const memoryPolicy = this.getMemoryPolicy(baseSessionId);
 
     let session = await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
-    let workspace = await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
-    await this.hydrateSessionFromSyncIfNeeded({
-      sessionId,
-      baseSessionId,
-      workspaceId,
-      workspaceRoot,
-      session,
-      workspace,
-    });
-    session = await this.sessionStore.getSession(sessionId);
-    workspace = await this.workspaceStore.getWorkspace(workspaceId);
+    let workspace = memoryPolicy.disablePersistentMemory
+      ? null
+      : await this.workspaceStore.getOrCreateWorkspace(workspaceId, workspaceRoot);
+    if (!memoryPolicy.disablePersistentMemory) {
+      await this.hydrateSessionFromSyncIfNeeded({
+        sessionId,
+        baseSessionId,
+        workspaceId,
+        workspaceRoot,
+        session,
+        workspace,
+      });
+      session = await this.sessionStore.getSession(sessionId);
+      workspace = await this.workspaceStore.getWorkspace(workspaceId);
+    }
     const projectInstructions = loadProjectInstructions(workspaceRoot);
     const focusedTaskId =
-      session && (session.focusedTaskId || session.activeTaskId)
+      !memoryPolicy.disablePersistentMemory && session && (session.focusedTaskId || session.activeTaskId)
         ? session.focusedTaskId || session.activeTaskId
         : null;
     const currentTask = focusedTaskId
       ? await this.taskStore.getTask(focusedTaskId)
-      : await this.taskStore.getActiveTaskForSession(sessionId);
+      : memoryPolicy.disablePersistentMemory
+        ? null
+        : await this.taskStore.getActiveTaskForSession(sessionId);
     const turn = classifyTurn({ prompt, currentTask });
     let task = currentTask;
     let taskPlan = null;
@@ -147,41 +178,52 @@ class MemoryManager {
       pendingTaskId: taskPlan && taskPlan.action === "create" && task ? task.id : null,
       evaluatedAt: new Date().toISOString(),
     });
-    const preferences = await this.userStore.getPreferences();
+    const preferences = memoryPolicy.disablePersistentMemory
+      ? {}
+      : await this.userStore.getPreferences();
 
     const preferredLanguage = detectPreferredLanguage(prompt);
-    if (preferredLanguage && !preferences.preferredLanguage) {
+    if (!memoryPolicy.disablePersistentMemory && preferredLanguage && !preferences.preferredLanguage) {
       await this.userStore.setPreference("preferredLanguage", preferredLanguage, {
         confidence: "observed",
         source: "prompt-language",
       });
     }
 
-    const freshPreferences = await this.userStore.getPreferences();
-    const referencedTaskSummaries = await this.taskStore.listReferencedTaskSummaries({
-      workspaceId,
-      sessionId,
-      prompt,
-      excludeTaskId: task ? task.id : null,
-    });
-    const recentSessions = isMemoryRecallPrompt(prompt)
+    const freshPreferences = memoryPolicy.disablePersistentMemory
+      ? {}
+      : await this.userStore.getPreferences();
+    const longTermMemory = memoryPolicy.disablePersistentMemory
+      ? []
+      : await this.longTermMemoryStore.listRecords({ workspaceId });
+    const referencedTaskSummaries = memoryPolicy.disablePersistentMemory || memoryPolicy.isolateSession
+      ? []
+      : await this.taskStore.listReferencedTaskSummaries({
+          workspaceId,
+          sessionId,
+          prompt,
+          excludeTaskId: task ? task.id : null,
+        });
+    const recentSessions = !memoryPolicy.disablePersistentMemory && !memoryPolicy.isolateSession && isMemoryRecallPrompt(prompt)
       ? await this.listRecentSessionSummaries({ workspaceId, sessionId })
       : [];
     const memorySlices = this.composeMemorySlices({
-      sessionSummary: session.summary || "",
-      sessionCompaction: session.compaction || null,
+      sessionSummary: memoryPolicy.disablePersistentMemory ? "" : session.summary || "",
+      sessionCompaction: memoryPolicy.disablePersistentMemory ? null : session.compaction || null,
       task,
       workspace,
       preferences: freshPreferences,
+      longTermMemory,
       referencedTaskSummaries,
       recentSessions,
     });
     const memoryText = this.composeMemoryText({
-      sessionSummary: session.summary || "",
-      sessionCompaction: session.compaction || null,
+      sessionSummary: memoryPolicy.disablePersistentMemory ? "" : session.summary || "",
+      sessionCompaction: memoryPolicy.disablePersistentMemory ? null : session.compaction || null,
       task,
       workspace,
       preferences: freshPreferences,
+      longTermMemory,
       referencedTaskSummaries,
       recentSessions,
     });
@@ -195,6 +237,7 @@ class MemoryManager {
       history: session.history || [],
       memoryText,
       memorySlices,
+      memoryPolicy,
       projectInstructionsText: projectInstructions.text,
     };
   }
@@ -213,6 +256,8 @@ class MemoryManager {
     const task = await this.taskStore.getTask(taskId);
     const tasks = await this.taskStore.listTasksForSession(sessionId);
     const preferences = await this.userStore.getPreferences();
+    const longTermMemory = await this.longTermMemoryStore.listRecords({ workspaceId });
+    const memoryEvents = await this.memoryEventStore.listEvents({ limit: 50 });
     const recentSessions = session && isMemoryRecallPrompt(session.lastPrompt)
       ? await this.listRecentSessionSummaries({ workspaceId, sessionId })
       : [];
@@ -222,6 +267,7 @@ class MemoryManager {
       task,
       workspace,
       preferences,
+      longTermMemory,
       referencedTaskSummaries: [],
       recentSessions,
     });
@@ -242,14 +288,147 @@ class MemoryManager {
       task,
       taskRouting: task && task.lastRoute ? task.lastRoute : null,
       tasks,
+      longTermMemory,
+      memoryEvents,
       workspace,
       projectInstructions: {
         sources: projectInstructions.sources,
         text: projectInstructions.text,
       },
       preferences,
+      memoryPolicy: this.getMemoryPolicy(this.baseSessionId),
       memoryText,
     };
+  }
+
+  async getMemoryControlsForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const sessionId = createSessionId(baseSessionId || this.baseSessionId, workspaceId);
+    const session = await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    const tasks = await this.taskStore.listTasksForSession(sessionId);
+    const preferences = await this.userStore.getPreferences();
+    const workspace = await this.workspaceStore.getWorkspace(workspaceId);
+    const longTermMemory = await this.longTermMemoryStore.listRecords({ workspaceId });
+    const memoryEvents = await this.memoryEventStore.listEvents({ limit: 20 });
+
+    return {
+      baseSessionId: baseSessionId || this.baseSessionId,
+      workspaceId,
+      sessionId,
+      policy: this.getMemoryPolicy(baseSessionId || this.baseSessionId),
+      counts: {
+        messages: session.messageCount || 0,
+        hasSummary: Boolean(session.summary),
+        tasks: tasks.length,
+        workspaceMemory: workspace ? 1 : 0,
+        userPreferences: Object.keys(preferences || {}).length,
+        longTermMemory: longTermMemory.length,
+        memoryEvents: memoryEvents.length,
+      },
+      session: {
+        title: createSessionTitle(session),
+        lastPrompt: session.lastPrompt || "",
+        summary: session.summary || "",
+        updatedAt: session.updatedAt || null,
+      },
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title || "",
+        status: task.status || "",
+        summary: task.summary || "",
+        updatedAt: task.updatedAt || null,
+      })),
+      preferences,
+      longTermMemory,
+      memoryEvents,
+    };
+  }
+
+  async setMemoryPolicyForUi(baseSessionId, policy) {
+    return this.setMemoryPolicy(baseSessionId || this.baseSessionId, policy);
+  }
+
+  async setPrivateWindowModeForUi(baseSessionId = this.baseSessionId, enabled = true) {
+    return this.setMemoryPolicy(baseSessionId || this.baseSessionId, {
+      privateWindow: Boolean(enabled),
+      isolateSession: Boolean(enabled),
+      disablePersistentMemory: Boolean(enabled),
+    });
+  }
+
+  async clearCurrentSessionMemoryForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const sessionId = createSessionId(baseSessionId || this.baseSessionId, workspaceId);
+    await this.sessionStore.clearSessionMemory(sessionId);
+    await this.taskStore.clearTasksForSession(sessionId);
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async clearCurrentSessionSummaryMemoryForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const sessionId = createSessionId(baseSessionId || this.baseSessionId, workspaceId);
+    await this.sessionStore.clearSessionSummaryMemory(sessionId);
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async clearCurrentTaskMemoryForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const sessionId = createSessionId(baseSessionId || this.baseSessionId, workspaceId);
+    await this.taskStore.clearTasksForSession(sessionId);
+    await this.sessionStore.clearSessionTraceAndRoutingMemory(sessionId);
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async clearCurrentWorkspaceMemoryForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    await this.workspaceStore.clearWorkspace(workspaceId);
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async clearUserMemoryForUi(baseSessionId = this.baseSessionId) {
+    await this.userStore.resetAllPreferences();
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async clearCurrentTraceAndRoutingMemoryForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const sessionId = createSessionId(baseSessionId || this.baseSessionId, workspaceId);
+    await this.sessionStore.clearSessionTraceAndRoutingMemory(sessionId);
+    return this.getMemoryControlsForUi(baseSessionId || this.baseSessionId);
+  }
+
+  async destroyCurrentWindowArtifactsForUi(baseSessionId = this.baseSessionId) {
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const targetBaseSessionId = baseSessionId || this.baseSessionId;
+    const sessionId = createSessionId(targetBaseSessionId, workspaceId);
+    await this.archiveCurrentWindowIfAllowed({
+      baseSessionId: targetBaseSessionId,
+      sessionId,
+      workspaceId,
+      reason: "destroy-current-window-artifacts",
+    });
+    await this.taskStore.clearTasksForSession(sessionId);
+    await this.sessionStore.deleteSessionRecord(sessionId);
+    await this.sessionStore.getOrCreateSession(sessionId, workspaceId);
+    return this.getMemoryControlsForUi(targetBaseSessionId);
+  }
+
+  async clearAllMemoryForUi() {
+    await this.sessionStore.clearAllSessionMemory();
+    await this.taskStore.resetAllTasks();
+    await this.workspaceStore.resetAllWorkspaces();
+    await this.userStore.resetAllPreferences();
+    await this.longTermMemoryStore.resetAllRecords();
+    await this.memoryEventStore.resetAllEvents();
+    await this.ensureCurrentSession();
+    return this.getMemoryControlsForUi(this.baseSessionId);
   }
 
   async getCurrentSessionMessagesForUi(baseSessionId = null) {
@@ -316,6 +495,12 @@ class MemoryManager {
       };
     }
 
+    await this.archiveCurrentWindowIfAllowed({
+      baseSessionId: targetBaseSessionId,
+      sessionId: targetSessionId,
+      workspaceId,
+      reason: "close-session",
+    });
     await this.sessionStore.closeSession(targetSessionId);
 
     if (targetSessionId === currentSessionId) {
@@ -340,6 +525,75 @@ class MemoryManager {
       activeBaseSessionId: this.baseSessionId,
       sessions: await this.listCurrentWorkspaceSessionsForUi(),
     };
+  }
+
+  async archiveCurrentWindowIfAllowed({ baseSessionId, sessionId, workspaceId, reason }) {
+    const policy = this.getMemoryPolicy(baseSessionId || this.baseSessionId);
+    const session = await this.sessionStore.getSession(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    if (policy.privateWindow || policy.disablePersistentMemory) {
+      await this.memoryEventStore.recordEvent({
+        type: "memory_commit",
+        layer: "long_term",
+        action: "create_window_archive",
+        status: "blocked",
+        baseSessionId,
+        sessionId,
+        workspaceId,
+        reason: policy.privateWindow
+          ? "private-window-blocks-long-term-archive"
+          : "persistent-memory-disabled",
+        metadata: {
+          requestedBy: reason || "",
+        },
+      });
+      return null;
+    }
+
+    const tasks = await this.taskStore.listTasksForSession(sessionId);
+    const archive = buildWindowArchiveRecord({
+      session,
+      tasks,
+      workspaceId,
+      reason,
+    });
+    if (!archive.text) {
+      await this.memoryEventStore.recordEvent({
+        type: "memory_commit",
+        layer: "long_term",
+        action: "create_window_archive",
+        status: "skipped",
+        baseSessionId,
+        sessionId,
+        workspaceId,
+        reason: "no-safe-window-content-to-archive",
+        metadata: {
+          requestedBy: reason || "",
+        },
+      });
+      return null;
+    }
+
+    const record = await this.longTermMemoryStore.createRecord(archive);
+    await this.memoryEventStore.recordEvent({
+      type: "memory_commit",
+      layer: "long_term",
+      action: "create_window_archive",
+      status: "completed",
+      baseSessionId,
+      sessionId,
+      workspaceId,
+      recordId: record.id,
+      reason: reason || "archive-current-window",
+      evidence: {
+        type: "current_window_summary",
+        summary: archive.title,
+      },
+    });
+    return record;
   }
 
   async listRecentSessionSummaries({ workspaceId, sessionId, limit = 5 }) {
@@ -393,8 +647,45 @@ class MemoryManager {
     return tasks[0] || null;
   }
 
-  async finalizeRun({ sessionId, taskId, taskPlan, prompt, reply, history, trace }) {
+  async finalizeRun({ baseSessionId = this.baseSessionId, sessionId, taskId, taskPlan, prompt, reply, history, trace }) {
     await this.sessionStore.setHistory(sessionId, history, prompt);
+    const memoryPolicy = this.getMemoryPolicy(baseSessionId);
+    const workspaceRoot = this.getWorkspaceRoot();
+    const workspaceId = createWorkspaceId(workspaceRoot);
+    const memoryCommit = {
+      kind: "MemoryCommit",
+      baseSessionId,
+      sessionId,
+      workspaceId,
+      wroteCurrentWindow: true,
+      wroteWorkingState: false,
+      wroteLongTerm: false,
+      wroteTrace: Boolean(trace),
+      blockedByPrivateMode: Boolean(memoryPolicy.privateWindow),
+      blockedPersistentMemory: Boolean(memoryPolicy.disablePersistentMemory),
+      events: [],
+    };
+    if (memoryPolicy.disablePersistentMemory) {
+      await this.sessionStore.setLastRunTrace(sessionId, trace || null);
+      const event = await this.memoryEventStore.recordEvent({
+        type: "memory_commit",
+        layer: "current_window",
+        action: "finalize_run",
+        status: "completed",
+        baseSessionId,
+        sessionId,
+        workspaceId,
+        reason: memoryPolicy.privateWindow
+          ? "private-window-current-memory-only"
+          : "persistent-memory-disabled",
+        metadata: memoryCommit,
+      });
+      memoryCommit.events.push(event);
+      return {
+        maintenanceCandidate: null,
+        memoryCommit,
+      };
+    }
     const compactionResult = await this.sessionStore.compactHistoryIfNeeded(sessionId);
     await this.sessionStore.setLastRunTrace(sessionId, trace || null);
     if (taskPlan) {
@@ -403,6 +694,7 @@ class MemoryManager {
         reply,
         sessionId,
       });
+      memoryCommit.wroteWorkingState = Boolean(committedTask);
       await this.sessionStore.updateSession(sessionId, (session) => {
         session.activeTaskId = committedTask ? committedTask.id : session.activeTaskId;
         session.focusedTaskId = committedTask ? committedTask.id : session.focusedTaskId;
@@ -421,6 +713,7 @@ class MemoryManager {
         reply,
         sessionId,
       });
+      memoryCommit.wroteWorkingState = true;
     }
 
     await this.uploadSessionSyncSnapshot({
@@ -437,6 +730,18 @@ class MemoryManager {
       reply,
       trace,
     });
+    const event = await this.memoryEventStore.recordEvent({
+      type: "memory_commit",
+      layer: "current_window",
+      action: "finalize_run",
+      status: "completed",
+      baseSessionId,
+      sessionId,
+      workspaceId,
+      reason: "run-finalized",
+      metadata: memoryCommit,
+    });
+    memoryCommit.events.push(event);
 
     if (compactionResult && compactionResult.changed && compactionResult.session) {
       const representativeTask = await this.findRepresentativeTaskForSession(compactionResult.session);
@@ -458,11 +763,13 @@ class MemoryManager {
               }
             : null,
         },
+        memoryCommit,
       };
     }
 
     return {
       maintenanceCandidate: null,
+      memoryCommit,
     };
   }
 
@@ -780,6 +1087,7 @@ class MemoryManager {
     task,
     workspace,
     preferences,
+    longTermMemory = [],
     referencedTaskSummaries = [],
     recentSessions = [],
   }) {
@@ -885,6 +1193,16 @@ class MemoryManager {
       sections.push(preferenceSection);
     }
 
+    const longTermLines = Array.isArray(longTermMemory)
+      ? longTermMemory
+          .slice(0, 6)
+          .map((record) => `${record.kind}: ${record.title}${record.text ? ` - ${record.text}` : ""}`)
+      : [];
+    const longTermSection = formatMemorySection("Long-term memory", longTermLines);
+    if (longTermSection) {
+      sections.push(longTermSection);
+    }
+
     if (!sections.length) {
       return "";
     }
@@ -898,6 +1216,7 @@ class MemoryManager {
     task,
     workspace,
     preferences,
+    longTermMemory = [],
     referencedTaskSummaries = [],
     recentSessions = [],
   }) {
@@ -974,6 +1293,12 @@ class MemoryManager {
       preferenceLines.push(`preferred language: ${preferences.preferredLanguage.value}`);
     }
 
+    const longTermLines = Array.isArray(longTermMemory)
+      ? longTermMemory
+          .slice(0, 6)
+          .map((record) => `${record.kind}: ${record.title}${record.text ? ` - ${record.text}` : ""}`)
+      : [];
+
     return {
       session: sessionLines.join("\n"),
       task: taskLines.join("\n"),
@@ -981,6 +1306,7 @@ class MemoryManager {
       referencedTasks: referencedTaskLines.join("\n"),
       recentSessions: recentSessionLines.join("\n"),
       user: preferenceLines.join("\n"),
+      longTerm: longTermLines.join("\n"),
     };
   }
 }
@@ -1006,6 +1332,85 @@ function extractMessageText(item) {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function buildWindowArchiveRecord({ session, tasks = [], workspaceId, reason }) {
+  const history = session && Array.isArray(session.history) ? session.history : [];
+  const userPrompts = history
+    .filter((item) => item && item.type === "message" && item.role === "user")
+    .map(extractMessageText)
+    .filter(Boolean)
+    .slice(-5);
+  const assistantReplies = history
+    .filter((item) => item && item.type === "message" && item.role === "assistant")
+    .map(extractMessageText)
+    .filter(Boolean)
+    .slice(-3);
+  const taskSummaries = tasks
+    .filter(Boolean)
+    .map((task) => [task.title, task.summary || task.lastOutcome || task.goal].filter(Boolean).join(": "))
+    .filter(Boolean)
+    .slice(0, 5);
+  const sections = [];
+
+  if (session && session.summary) {
+    sections.push(`Window summary: ${sanitizeArchiveText(session.summary, 1200)}`);
+  }
+  if (taskSummaries.length) {
+    sections.push(`Work state: ${taskSummaries.map((item) => sanitizeArchiveText(item, 600)).join(" | ")}`);
+  }
+  if (userPrompts.length) {
+    sections.push(`Recent user prompts: ${userPrompts.map((item) => sanitizeArchiveText(item, 280)).join(" | ")}`);
+  }
+  if (assistantReplies.length) {
+    sections.push(`Recent assistant outcomes: ${assistantReplies.map((item) => sanitizeArchiveText(item, 360)).join(" | ")}`);
+  }
+
+  const text = sections.join("\n").trim();
+  if (!text) {
+    return {
+      kind: "window_archive",
+      scope: "workspace",
+      workspaceId,
+      title: "",
+      text: "",
+    };
+  }
+
+  const titleSource =
+    (session && session.lastPrompt) ||
+    (taskSummaries.length ? taskSummaries[0] : "") ||
+    "Archived Mochi window";
+
+  return {
+    kind: "window_archive",
+    scope: "workspace",
+    workspaceId,
+    title: sanitizeArchiveText(titleSource, 96) || "Archived Mochi window",
+    text,
+    content: {
+      sessionId: session && session.id ? session.id : "",
+      messageCount: session && session.messageCount ? session.messageCount : history.length,
+      archivedReason: reason || "",
+      taskCount: tasks.length,
+    },
+    source: "window_archive",
+    confidence: "derived",
+    evidence: {
+      type: "current_window_archive",
+      summary: `Archived ${history.length} history items and ${tasks.length} working-state records.`,
+    },
+  };
+}
+
+function sanitizeArchiveText(value, limit) {
+  const text = String(value || "")
+    .replace(/sk-[A-Za-z0-9_\-]{12,}/g, "[redacted-openai-key]")
+    .replace(/AIza[A-Za-z0-9_\-]{12,}/g, "[redacted-gemini-key]")
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[redacted-email]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, limit);
 }
 
 function extractBaseSessionId(sessionId, workspaceId) {

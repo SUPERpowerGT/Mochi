@@ -1,9 +1,15 @@
 {
-  "name": "local-agent-chat",
+  "name": "mochi-local-agent",
   "displayName": "Mochi",
-  "description": "A local VS Code chat agent with session memory, workspace tools, and cautious file editing.",
-  "version": "0.0.1",
-  "publisher": "local",
+  "description": "Local-first AI coding agent for VS Code with workspace tools, session memory, and approval-aware edits.",
+  "version": "0.0.5",
+  "publisher": "zee",
+  "icon": "media/mochi_icon.png",
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
+  "preview": true,
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,8 +17,25 @@
   },
   "type": "commonjs",
   "scripts": {
-    "setup:openai": "node ./scripts/setup_openai.js"
+    "setup:model": "node ./scripts/setup_model.js",
+    "setup:openai": "npm run setup:model",
+    "test": "node ./scripts/run_tests.js test",
+    "test:unit": "node ./scripts/run_tests.js test/unit",
+    "test:integration": "node ./scripts/run_tests.js test/integration",
+    "test:security": "node ./scripts/run_tests.js test/security",
+    "test:watch": "node --test --watch",
+    "test:file": "node ./scripts/run_tests.js",
+    "test:report": "node ./scripts/run_test_report.js",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "package:vsix": "npx @vscode/vsce package",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "publish:marketplace": "npx @vscode/vsce publish",
+    "release:marketplace": "npm run version:patch && npm run publish:marketplace"
   },
+  "bugs": {
+    "url": "https://github.com/SUPERpowerGT/Mochi/issues"
+  },
+  "homepage": "https://github.com/SUPERpowerGT/Mochi#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -20,17 +43,23 @@
     "@openai/agents": "^0.1.0",
     "zod": "^3.25.40"
   },
-  "scripts": {
-    "test": "node --test --test-reporter=spec \"test/unit/*.test.js\"",
-    "test:watch": "node --test --watch --test-reporter=spec \"test/unit/*.test.js\"",
-    "test:file": "node --test --test-reporter=spec",
-    "test:coverage": "node --test --experimental-test-coverage --test-reporter=spec \"test/unit/*.test.js\""
-  },
   "categories": [
+    "Machine Learning",
     "Other"
+  ],
+  "keywords": [
+    "agent",
+    "ai",
+    "chat",
+    "coding",
+    "developer-tools",
+    "local-first",
+    "openai",
+    "workspace"
   ],
   "activationEvents": [
     "onCommand:localAgent.openChat",
+    "onCommand:localAgent.configureModelCredentials",
     "onCommand:localAgent.sendSelection",
     "onCommand:localAgent.applyLastReply",
     "onCommand:localAgent.quickAsk",
@@ -44,6 +73,19 @@
     "onCommand:localAgent.selectWorkspaceFolder",
     "onCommand:localAgent.openMemorySnapshot",
     "onCommand:localAgent.openRawMemorySnapshot",
+    "onCommand:localAgent.openRuntimeLogs",
+    "onCommand:localAgent.openMemoryControls",
+    "onCommand:localAgent.togglePrivateWindowMode",
+    "onCommand:localAgent.toggleSessionMemoryIsolation",
+    "onCommand:localAgent.togglePersistentMemoryRead",
+    "onCommand:localAgent.destroyCurrentWindowArtifacts",
+    "onCommand:localAgent.clearCurrentSessionMemory",
+    "onCommand:localAgent.clearCurrentSessionSummaryMemory",
+    "onCommand:localAgent.clearCurrentTaskMemory",
+    "onCommand:localAgent.clearCurrentWorkspaceMemory",
+    "onCommand:localAgent.clearUserMemory",
+    "onCommand:localAgent.clearCurrentTraceMemory",
+    "onCommand:localAgent.clearAllMemory",
     "onView:localAgent.chatView"
   ],
   "main": "./src/extension/extension.js",
@@ -70,6 +112,10 @@
       {
         "command": "localAgent.openChat",
         "title": "Local Agent: Open Chat"
+      },
+      {
+        "command": "localAgent.configureModelCredentials",
+        "title": "Mochi: Configure Model Credentials"
       },
       {
         "command": "localAgent.sendSelection",
@@ -122,7 +168,93 @@
       {
         "command": "localAgent.openRawMemorySnapshot",
         "title": "Local Agent: Open Raw Memory Snapshot"
+      },
+      {
+        "command": "localAgent.openRuntimeLogs",
+        "title": "Mochi: Open Runtime Logs"
+      },
+      {
+        "command": "localAgent.openMemoryControls",
+        "title": "Mochi: Open Memory Controls"
+      },
+      {
+        "command": "localAgent.togglePrivateWindowMode",
+        "title": "Mochi: Toggle Current Window Private Mode"
+      },
+      {
+        "command": "localAgent.toggleSessionMemoryIsolation",
+        "title": "Mochi: Toggle Current Window Memory Isolation"
+      },
+      {
+        "command": "localAgent.togglePersistentMemoryRead",
+        "title": "Mochi: Toggle Current Window Persistent Memory Reads"
+      },
+      {
+        "command": "localAgent.destroyCurrentWindowArtifacts",
+        "title": "Mochi: Delete Current Window Artifacts"
+      },
+      {
+        "command": "localAgent.clearCurrentSessionMemory",
+        "title": "Mochi: Clear Current Window Memory"
+      },
+      {
+        "command": "localAgent.clearCurrentSessionSummaryMemory",
+        "title": "Mochi: Clear Current Session Summary Memory"
+      },
+      {
+        "command": "localAgent.clearCurrentTaskMemory",
+        "title": "Mochi: Clear Current Window Working State"
+      },
+      {
+        "command": "localAgent.clearCurrentWorkspaceMemory",
+        "title": "Mochi: Clear Current Workspace Memory"
+      },
+      {
+        "command": "localAgent.clearUserMemory",
+        "title": "Mochi: Clear User Memory"
+      },
+      {
+        "command": "localAgent.clearCurrentTraceMemory",
+        "title": "Mochi: Clear Current Trace Memory"
+      },
+      {
+        "command": "localAgent.clearAllMemory",
+        "title": "Mochi: Clear All Local Memory"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Mochi",
+      "properties": {
+        "mochi.modelProvider": {
+          "type": "string",
+          "default": "openai",
+          "enum": [
+            "openai",
+            "gemini",
+            "openai-compatible"
+          ],
+          "description": "Model provider Mochi should use."
+        },
+        "mochi.openaiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI-compatible API base URL used by Mochi."
+        },
+        "mochi.model": {
+          "type": "string",
+          "default": "gpt-4.1-mini",
+          "description": "Default model Mochi should use."
+        },
+        "mochi.apiFormat": {
+          "type": "string",
+          "default": "chat_completions",
+          "enum": [
+            "chat_completions",
+            "responses"
+          ],
+          "description": "OpenAI API format Mochi should use."
+        }
+      }
+    }
   }
 }

@@ -47,6 +47,13 @@ class UserStore {
 
     return this.getPreferences();
   }
+
+  async resetAllPreferences() {
+    return this.store.write({
+      version: 1,
+      preferences: {},
+    });
+  }
 }
 
 module.exports = {

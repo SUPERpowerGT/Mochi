@@ -90,7 +90,7 @@ The runtime currently remembers:
 
 - the current session history
 - a rolling summary for older compacted session history
-- the active task for the current session
+- internal working state for the current session
 - the latest turn classification at the session layer
 - failed work runs no longer leave behind empty active tasks
 - when a clearly new user goal appears, Mochi can roll over into a new active task instead of keeping every request under the first task forever
@@ -98,8 +98,8 @@ The runtime currently remembers:
 - basic facts about the active workspace
 - suggested verification commands for the active workspace when they can be inferred
 - lightweight user preference data such as preferred language
-- a task list per session that can be inspected in the memory snapshot
-- the latest task routing diagnostics for the active task, including why Mochi continued, created, or reactivated a task
+- a working-state list per session that can be inspected in the memory snapshot
+- the latest routing diagnostics for the active working state, including why Mochi continued, created, or reactivated it
 
 Important behavior:
 
@@ -107,11 +107,29 @@ Important behavior:
 - conversation-style turns stay in session memory
 - older conversation turns may be summarized locally once the session grows past the compaction threshold
 - only work-like turns enter the task routing layer
+- Private mode is exposed as a direct chat-panel toggle for the current window
+- Private mode disables persistent memory reads and cross-session memory recall for the current window
+- current-window artifact deletion removes the current session record and linked task/trace/routing artifacts while leaving other sessions untouched
+- run finalization applies persistent-memory policy using the run's base session id, so switching windows does not accidentally apply the wrong memory policy
+- product memory now uses exactly three layers: Current Window Memory, Long-Term Memory, and Runtime Trace
+- task-like records are implementation working state, not user-facing long-term memory
+- non-private window archive/delete is the intended first trigger for compressing current-window context into a `kind: "window_archive"` Long-Term Memory record
+
+Current slash shortcuts:
+
+- `/help`
+- `/new`
+- `/memory`
+- `/clear-private-window`
+- `/model`
+
+The slash menu is intentionally small. Full memory management remains in Memory Controls and the Command Palette.
 
 You can inspect the current memory state directly from VS Code with:
 
 - `Local Agent: Open Memory Snapshot`
 - `Local Agent: Open Raw Memory Snapshot`
+- `Mochi: Open Memory Controls`
 
 The default memory snapshot command now opens a compact, human-readable snapshot so debugging does not start with a huge raw session dump.
 It now includes session compaction metadata such as whether a summary exists, when it was updated, and how many raw history items remain.
@@ -164,7 +182,7 @@ This helps repo-specific guidance live with the codebase instead of being re-exp
 ### 1. Configure Model Provider
 
 ```bash
-npm run setup:openai
+npm run setup:model
 ```
 
 This setup path works on Windows, macOS, and Linux. If you do not use a proxy, choose `n` when asked to configure proxy settings. Mochi reads `~/.openai-env` directly at runtime, so Windows users can usually just restart the Extension Development Host after setup.
@@ -192,11 +210,14 @@ This installs:
 
 - multi-agent specialization is still lightweight
 - memory exists, but agent-specific memory slicing is still a future step
-- session compaction is currently local and extractive; LLM-based maintenance compaction is a future step
-- task memory, session summaries, and referenced memories can still overlap because a dedicated memory selector has not been added yet
+- Memory V2 has an initial commit/event/archive path, but archive, policy, and event decisions still need to move into a dedicated Memory Controller
+- internal working state, session summaries, and referenced memories can still overlap because a dedicated memory selector has not been added yet
 - streamed replies now work, but the chat reading experience still needs more typography and layout polish
 - the current memory layer is persistent and useful, but still intentionally simple
 - task routing is now more structured, but it still relies mostly on prompt-level signals rather than richer task signals
+- explicit "remember this" and "forget this" flows are not implemented yet
+- trace storage is still session-attached rather than split into a dedicated trace store
+- additional automatic promotion from Current Window Memory to Long-Term Memory is still an open design decision beyond the implemented non-private window archive path
 - turn classification is currently heuristic, so some ambiguous inputs may still need better generic signals over time
 - destructive file tools now have a first interactive approval guard, but it is still narrower than a full approval framework
 - the runtime now uses character-based context budgets, not token-accurate budgets

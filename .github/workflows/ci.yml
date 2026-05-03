@@ -36,6 +36,15 @@ jobs:
       - name: Syntax check
         run: find src -name "*.js" | xargs node --check
 
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run security tests
+        run: npm run test:security
+
       - name: Package extension
         run: npx @vscode/vsce package
 

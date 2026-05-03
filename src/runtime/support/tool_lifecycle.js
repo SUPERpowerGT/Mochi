@@ -11,6 +11,8 @@ const MUTATING_TOOL_NAMES = new Set([
   "delete_dir",
 ]);
 
+const { logAuditEvent } = require("./audit_logger");
+
 function wrapToolsWithLifecycle(tools, options = {}) {
   const items = Array.isArray(tools) ? tools : [];
   const getRunState = options.getRunState || (() => null);
@@ -33,25 +35,53 @@ function wrapToolWithLifecycle(tool, { getRunState, requestToolAccess }) {
       const runState = getRunState ? getRunState() : null;
       const preEvent = createPreToolUseEvent(toolName, args, runState);
       recordLifecycleEvent(runState, preEvent);
+      logAuditEvent(createToolAuditEvent("tool_call_started", preEvent, runState));
       const access = requestToolAccess
         ? requestToolAccess(toolName, args)
         : { allowed: true };
 
       if (access && access.allowed === false) {
         const blockedOutput = createToolBlockedOutput(toolName, args, access);
-        recordLifecycleEvent(runState, createPostToolUseEvent(toolName, args, blockedOutput, null, runState));
+        const postEvent = createPostToolUseEvent(toolName, args, blockedOutput, null, runState);
+        recordLifecycleEvent(runState, postEvent);
+        logAuditEvent(createToolAuditEvent("tool_call_finished", postEvent, runState));
         return blockedOutput;
       }
 
       try {
         const output = await originalExecute(args, context);
-        recordLifecycleEvent(runState, createPostToolUseEvent(toolName, args, output, null, runState));
+        const postEvent = createPostToolUseEvent(toolName, args, output, null, runState);
+        recordLifecycleEvent(runState, postEvent);
+        logAuditEvent(createToolAuditEvent("tool_call_finished", postEvent, runState));
         return output;
       } catch (error) {
-        recordLifecycleEvent(runState, createPostToolUseEvent(toolName, args, null, error, runState));
+        const postEvent = createPostToolUseEvent(toolName, args, null, error, runState);
+        recordLifecycleEvent(runState, postEvent);
+        logAuditEvent(createToolAuditEvent("tool_call_finished", postEvent, runState));
         throw error;
       }
     },
+  };
+}
+
+function createToolAuditEvent(eventName, lifecycleEvent, runState) {
+  const policy = lifecycleEvent && lifecycleEvent.policy ? lifecycleEvent.policy : {};
+  return {
+    event: eventName,
+    level: lifecycleEvent && lifecycleEvent.ok === false ? "warn" : "info",
+    runId: runState && runState.id,
+    baseSessionId: lifecycleEvent && lifecycleEvent.baseSessionId
+      ? lifecycleEvent.baseSessionId
+      : runState && runState.baseSessionId,
+    tool: lifecycleEvent && lifecycleEvent.tool,
+    category: lifecycleEvent && lifecycleEvent.category,
+    risk: lifecycleEvent && lifecycleEvent.risk,
+    ok: lifecycleEvent && typeof lifecycleEvent.ok === "boolean" ? lifecycleEvent.ok : undefined,
+    policyDecision: policy.decision,
+    requiresApproval: Boolean(policy.requiresApproval),
+    mutatesWorkspace: Boolean(policy.mutatesWorkspace),
+    approvalDenied: Boolean(policy.approvalDenied),
+    message: lifecycleEvent && lifecycleEvent.message,
   };
 }
 

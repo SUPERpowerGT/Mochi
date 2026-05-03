@@ -36,6 +36,10 @@ const {
 } = require("./support/stream_event_mapper");
 const { createRuntimeTools } = require("./tools");
 const { normalizeIdentity } = require("./support/runtime_identity");
+const {
+  configureAuditLogger,
+  logAuditEvent,
+} = require("./support/audit_logger");
 
 class OpenAIAgentsRuntime {
   constructor(options = {}) {
@@ -45,6 +49,7 @@ class OpenAIAgentsRuntime {
     this.onActivity = options.onActivity || null;
     this.onTextDelta = options.onTextDelta || null;
     this.onReplyControl = options.onReplyControl || null;
+    this.configureEnvironment = options.configureEnvironment || null;
     this.contextBudget = {
       ...DEFAULT_CONTEXT_BUDGET,
       ...(options.contextBudget || {}),
@@ -78,6 +83,10 @@ class OpenAIAgentsRuntime {
         sessionSyncAuthToken: options.sessionSyncAuthToken,
         sessionSyncClient: options.sessionSyncClient,
       });
+    configureAuditLogger({
+      storageRoot: options.auditLogStorageRoot || options.memoryStorageRoot,
+      enabled: options.auditLoggingEnabled !== false,
+    });
   }
 
   async sendMessage(prompt, options = {}) {
@@ -91,6 +100,15 @@ class OpenAIAgentsRuntime {
       streamedText: "",
       clearedClarificationDraft: false,
     };
+    logAuditEvent({
+      event: "agent_run_started",
+      runId: runState.id,
+      baseSessionId: runState.baseSessionId,
+      workspaceRoot: this.getWorkspaceRoot(),
+      provider: this.providerContext && this.providerContext.provider,
+      model: this.providerContext && this.providerContext.model,
+      promptLength: String(prompt || "").length,
+    });
 
     return this.runStateStorage.run(runState, async () => {
       this.currentRunState = runState;
@@ -141,6 +159,7 @@ class OpenAIAgentsRuntime {
         error: null,
       });
       const finalizeResult = await this.memoryManager.finalizeRun({
+        baseSessionId: runState.baseSessionId,
         sessionId: memoryState.sessionId,
         taskId: memoryState.taskId,
         taskPlan: memoryState.taskPlan,
@@ -150,6 +169,16 @@ class OpenAIAgentsRuntime {
         trace,
       });
       await this.runMemoryMaintenanceIfNeeded(finalizeResult);
+      logAuditEvent({
+        event: "agent_run_completed",
+        runId: runState.id,
+        baseSessionId: runState.baseSessionId,
+        workspaceRoot: this.getWorkspaceRoot(),
+        provider: this.providerContext && this.providerContext.provider,
+        model: this.providerContext && this.providerContext.model,
+        replyLength: String(text || "").length,
+        ...summarizeTraceForAudit(trace),
+      });
       this.emitActivity({
         kind: "status",
         text: "Run complete.",
@@ -169,6 +198,17 @@ class OpenAIAgentsRuntime {
       if (memoryState && memoryState.sessionId) {
         await this.memoryManager.recordRunTrace(memoryState.sessionId, trace);
       }
+      logAuditEvent({
+        event: "agent_run_failed",
+        level: "error",
+        runId: runState.id,
+        baseSessionId: runState.baseSessionId,
+        workspaceRoot: this.getWorkspaceRoot(),
+        provider: this.providerContext && this.providerContext.provider,
+        model: this.providerContext && this.providerContext.model,
+        errorMessage: error && error.message ? error.message : String(error),
+        ...summarizeTraceForAudit(trace),
+      });
       throw this.createProviderAwareError(error);
     } finally {
       this.releaseToolRun(runState);
@@ -187,6 +227,7 @@ class OpenAIAgentsRuntime {
 
   async getMemorySnapshot() {
     loadOpenAIEnvFile();
+    this.applyExtensionEnvironment();
     if (!this.providerContext) {
       this.providerContext = getProviderContext();
     }
@@ -195,6 +236,50 @@ class OpenAIAgentsRuntime {
       ...snapshot,
       provider: this.providerContext || getProviderContext(),
     };
+  }
+
+  async getMemoryControlsForUi(baseSessionId = null) {
+    return this.memoryManager.getMemoryControlsForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async setMemoryPolicyForUi(baseSessionId, policy) {
+    return this.memoryManager.setMemoryPolicyForUi(baseSessionId || this.getBaseSessionId(), policy);
+  }
+
+  async setPrivateWindowModeForUi(baseSessionId = null, enabled = true) {
+    return this.memoryManager.setPrivateWindowModeForUi(baseSessionId || this.getBaseSessionId(), enabled);
+  }
+
+  async clearCurrentSessionMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearCurrentSessionMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearCurrentSessionSummaryMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearCurrentSessionSummaryMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearCurrentTaskMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearCurrentTaskMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearCurrentWorkspaceMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearCurrentWorkspaceMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearUserMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearUserMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearCurrentTraceAndRoutingMemoryForUi(baseSessionId = null) {
+    return this.memoryManager.clearCurrentTraceAndRoutingMemoryForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async destroyCurrentWindowArtifactsForUi(baseSessionId = null) {
+    return this.memoryManager.destroyCurrentWindowArtifactsForUi(baseSessionId || this.getBaseSessionId());
+  }
+
+  async clearAllMemoryForUi() {
+    return this.memoryManager.clearAllMemoryForUi();
   }
 
   setBaseSessionId(baseSessionId) {
@@ -361,11 +446,13 @@ class OpenAIAgentsRuntime {
   async getSdk() {
     if (this.sdk && this.zod) {
       loadOpenAIEnvFile();
+      this.applyExtensionEnvironment();
       this.configureModelProvider();
       return this.sdk;
     }
 
     loadOpenAIEnvFile();
+    this.applyExtensionEnvironment();
 
     try {
       this.sdk = await import("@openai/agents");
@@ -426,6 +513,12 @@ class OpenAIAgentsRuntime {
       tracingDisabled: providerName !== "openai",
       traceIncludeSensitiveData: false,
     };
+  }
+
+  applyExtensionEnvironment() {
+    if (typeof this.configureEnvironment === "function") {
+      this.configureEnvironment();
+    }
   }
 
   async runAgent(sdk, agent, input) {
@@ -523,21 +616,50 @@ class OpenAIAgentsRuntime {
 
   async requestToolApproval(request) {
     const trace = this.getCurrentTrace();
+    const runState = this.getCurrentRunState();
     const approvalId = recordApprovalRequested(trace, {
       ...request,
       tool: request && request.action ? request.action : "tool",
     });
+    logAuditEvent({
+      event: "approval_requested",
+      approvalId,
+      runId: runState && runState.id,
+      baseSessionId: runState && runState.baseSessionId,
+      action: request && request.action,
+      kind: request && request.kind,
+      reason: request && request.reason,
+      relativePath: request && request.relativePath,
+      prompt: request && request.prompt,
+    });
 
     try {
-      const runState = this.getCurrentRunState();
       const approved = await this.requestApproval({
         ...(request || {}),
         baseSessionId: runState ? runState.baseSessionId : "",
       });
       recordApprovalResolved(trace, approvalId, Boolean(approved));
+      logAuditEvent({
+        event: "approval_resolved",
+        approvalId,
+        runId: runState && runState.id,
+        baseSessionId: runState && runState.baseSessionId,
+        action: request && request.action,
+        approved: Boolean(approved),
+      });
       return Boolean(approved);
     } catch (error) {
       recordApprovalResolved(trace, approvalId, false, error);
+      logAuditEvent({
+        event: "approval_resolved",
+        level: "error",
+        approvalId,
+        runId: runState && runState.id,
+        baseSessionId: runState && runState.baseSessionId,
+        action: request && request.action,
+        approved: false,
+        errorMessage: error && error.message ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -848,6 +970,27 @@ function parseMemoryMaintenanceOutput(text) {
   } catch (error) {
     return null;
   }
+}
+
+function summarizeTraceForAudit(trace) {
+  const lifecycle = trace && trace.lifecycle ? trace.lifecycle : {};
+  const approvals = trace && Array.isArray(trace.approvals) ? trace.approvals : [];
+  const deniedApprovals = approvals.filter((approval) => approval && approval.approved === false);
+  return {
+    status: trace && trace.status ? trace.status : "unknown",
+    verificationStatus:
+      trace && trace.verification && trace.verification.status
+        ? trace.verification.status
+        : lifecycle.verificationStatus || "unknown",
+    toolUseCount: lifecycle.toolUseCount || 0,
+    highRiskToolUseCount: lifecycle.highRiskToolUseCount || 0,
+    mutationToolUseCount: lifecycle.mutationToolUseCount || 0,
+    failedToolUseCount: lifecycle.failedToolUseCount || 0,
+    approvalRequiredToolUseCount: lifecycle.approvalRequiredToolUseCount || 0,
+    approvalDeniedToolUseCount: lifecycle.approvalDeniedToolUseCount || 0,
+    approvalsRequested: approvals.length,
+    approvalsDenied: deniedApprovals.length,
+  };
 }
 
 function inferProviderFromBaseUrl(baseUrl) {

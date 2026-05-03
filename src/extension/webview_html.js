@@ -442,6 +442,7 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         opacity: 0.86;
       }
       .composer {
+        position: relative;
         padding: 14px 18px 18px;
         border-top: 1px solid var(--mochi-border);
         display: grid;
@@ -471,11 +472,106 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           0 0 0 1px var(--mochi-accent),
           0 10px 24px rgba(31, 79, 143, 0.12);
       }
+      .slash-menu {
+        display: none;
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: calc(18px + 42px);
+        z-index: 20;
+        max-height: min(320px, 48vh);
+        border: 1px solid var(--mochi-border);
+        border-radius: 12px;
+        background: var(--mochi-surface-raised);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+        overflow: auto;
+      }
+      .slash-menu.is-open {
+        display: grid;
+      }
+      .slash-item {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+        padding: 10px 12px;
+        border-radius: 0;
+        border: 0;
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        text-align: left;
+        box-shadow: none;
+      }
+      .slash-item:hover,
+      .slash-item.is-active {
+        background: var(--mochi-accent-soft);
+        color: var(--vscode-editor-foreground);
+        transform: none;
+      }
+      .slash-item-title {
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .slash-item-detail {
+        font-size: 12px;
+        opacity: 0.72;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .actions {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 12px;
+      }
+      .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+      .private-toggle {
+        width: 96px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 82%, black 18%);
+        color: color-mix(in srgb, var(--vscode-editor-foreground) 78%, transparent);
+        box-shadow: none;
+        padding: 0 11px 0 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        position: relative;
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0;
+        transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+      }
+      .private-toggle::before {
+        content: "";
+        position: absolute;
+        left: 5px;
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--vscode-editor-foreground) 82%, var(--vscode-editor-background) 18%);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+        transition: transform 140ms ease, background 140ms ease;
+      }
+      .private-toggle.is-on {
+        padding-left: 12px;
+        padding-right: 36px;
+        background: color-mix(in srgb, var(--mochi-accent) 72%, var(--vscode-editor-background) 28%);
+        border-color: color-mix(in srgb, var(--mochi-accent) 65%, var(--mochi-border) 35%);
+        color: var(--vscode-button-foreground);
+      }
+      .private-toggle.is-on::before {
+        transform: translateX(62px);
+        background: var(--vscode-button-foreground);
       }
       button {
         border: 0;
@@ -504,6 +600,11 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         filter: brightness(1.05);
         transform: translateY(-1px);
         box-shadow: 0 10px 22px rgba(31, 79, 143, 0.24);
+      }
+      .private-toggle:hover:not(:disabled) {
+        filter: brightness(1.04);
+        transform: none;
+        box-shadow: none;
       }
       .session-tab,
       .tab-add-button {
@@ -546,9 +647,13 @@ function getWebviewHtml({ logoUri = "" } = {}) {
       <div class="composer">
         <div id="status" class="statusline">Ready.</div>
         <textarea id="prompt" placeholder="Ask Mochi about your code, files, or next change..."></textarea>
+        <div id="slashMenu" class="slash-menu" role="listbox" aria-label="Mochi slash commands"></div>
         <div class="actions">
-          <div class="subtle">Press Enter to send. Use Shift+Enter for a new line.</div>
-          <button id="send" type="button" onclick="sendPrompt()">Send</button>
+          <div class="subtle">Press Enter to send. Use Shift+Enter for a new line. Type / for shortcuts.</div>
+          <div class="action-buttons">
+            <button id="privateToggle" class="private-toggle" type="button" aria-pressed="false" title="Toggle current window private mode">Private</button>
+            <button id="send" type="button" onclick="sendPrompt()">Send</button>
+          </div>
         </div>
       </div>
     </div>
@@ -559,8 +664,10 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         const messagesEl = document.getElementById("messages");
         const statusEl = document.getElementById("status");
         const sendButton = document.getElementById("send");
+        const privateToggleButton = document.getElementById("privateToggle");
         const newSessionButton = document.getElementById("newSession");
         const sessionTabsEl = document.getElementById("sessionTabs");
+        const slashMenuEl = document.getElementById("slashMenu");
         let pendingEl = null;
         let pendingShellEl = null;
         let activityStackEl = null;
@@ -570,8 +677,46 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         let loadedBaseSessionId = "";
         let latestSessionSyncVersion = 0;
         let sessions = [];
+        let slashMenuOpen = false;
+        let slashMatches = [];
+        let slashActiveIndex = 0;
+        let privateWindowOn = false;
         const draftsBySession = Object.create(null);
         const approvalCards = new Map();
+        const slashCommands = [
+          {
+            id: "help",
+            name: "/help",
+            title: "Show Slash Commands",
+            detail: "List the shortcuts you can run from the chat box.",
+            client: "help"
+          },
+          {
+            id: "newSession",
+            name: "/new",
+            title: "New Chat",
+            detail: "Start a fresh Mochi chat session.",
+            client: "newSession"
+          },
+          {
+            id: "memoryControls",
+            name: "/memory",
+            title: "Memory Controls",
+            detail: "Open memory controls for the current Mochi window."
+          },
+          {
+            id: "destroyCurrentWindowArtifacts",
+            name: "/clear-private-window",
+            title: "Delete Current Window Artifacts",
+            detail: "Delete this window's chat, task, trace, and routing artifacts."
+          },
+          {
+            id: "configureModel",
+            name: "/model",
+            title: "Configure Model",
+            detail: "Set provider, API key, base URL, model, and API format."
+          }
+        ];
 
         function scrollToBottom() {
           messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -629,6 +774,15 @@ function getWebviewHtml({ logoUri = "" } = {}) {
 
         function restoreDraftForSession(baseSessionId) {
           promptEl.value = draftsBySession[baseSessionId || ""] || "";
+        }
+
+        function setPrivateWindowState(enabled) {
+          privateWindowOn = Boolean(enabled);
+          privateToggleButton.classList.toggle("is-on", privateWindowOn);
+          privateToggleButton.setAttribute("aria-pressed", privateWindowOn ? "true" : "false");
+          privateToggleButton.title = privateWindowOn
+            ? "Private mode is on for this Mochi window"
+            : "Toggle current window private mode";
         }
 
         function renderSessionTabs(items) {
@@ -1140,10 +1294,203 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           return div;
         }
 
+        function getSlashQuery() {
+          const value = promptEl.value || "";
+          const trimmed = value.trimStart();
+          if (!trimmed.startsWith("/") && !trimmed.startsWith("／")) {
+            return null;
+          }
+          if (trimmed.includes("\\n")) {
+            return null;
+          }
+          return trimmed.slice(1).trim().toLowerCase();
+        }
+
+        function updateSlashMenu() {
+          const query = getSlashQuery();
+          if (query === null) {
+            closeSlashMenu();
+            return;
+          }
+
+          slashMatches = slashCommands.filter(function (command) {
+            const haystack = [
+              command.name,
+              command.title,
+              command.detail
+            ].join(" ").toLowerCase();
+            return !query || haystack.includes(query);
+          });
+          slashActiveIndex = Math.min(slashActiveIndex, Math.max(slashMatches.length - 1, 0));
+          renderSlashMenu();
+        }
+
+        function openSlashMenu(query) {
+          slashMatches = slashCommands.filter(function (command) {
+            const haystack = [
+              command.name,
+              command.title,
+              command.detail
+            ].join(" ").toLowerCase();
+            return !query || haystack.includes(query);
+          });
+          slashActiveIndex = 0;
+          renderSlashMenu();
+        }
+
+        function renderSlashMenu() {
+          slashMenuEl.innerHTML = "";
+          if (!slashMatches.length) {
+            slashMenuOpen = false;
+            slashMenuEl.classList.remove("is-open");
+            return;
+          }
+
+          slashMenuOpen = true;
+          slashMenuEl.classList.add("is-open");
+          slashMatches.forEach(function (command, index) {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "slash-item" + (index === slashActiveIndex ? " is-active" : "");
+            item.dataset.index = String(index);
+            item.setAttribute("role", "option");
+            item.setAttribute("aria-selected", index === slashActiveIndex ? "true" : "false");
+            item.addEventListener("mousedown", function (event) {
+              event.preventDefault();
+              runSlashCommand(command);
+            });
+            item.addEventListener("mouseenter", function () {
+              slashActiveIndex = index;
+              syncSlashActiveItem({ scroll: false });
+            });
+
+            const title = document.createElement("div");
+            title.className = "slash-item-title";
+            title.textContent = command.name + "  " + command.title;
+
+            const detail = document.createElement("div");
+            detail.className = "slash-item-detail";
+            detail.textContent = command.detail;
+
+            item.appendChild(title);
+            item.appendChild(detail);
+            slashMenuEl.appendChild(item);
+          });
+          syncSlashActiveItem({ scroll: true });
+        }
+
+        function syncSlashActiveItem(options) {
+          const settings = options || {};
+          const items = Array.from(slashMenuEl.querySelectorAll(".slash-item"));
+          items.forEach(function (item, index) {
+            const active = index === slashActiveIndex;
+            item.classList.toggle("is-active", active);
+            item.setAttribute("aria-selected", active ? "true" : "false");
+          });
+
+          if (settings.scroll === false) {
+            return;
+          }
+
+          const activeItem = items[slashActiveIndex];
+          if (activeItem) {
+            activeItem.scrollIntoView({ block: "nearest" });
+          }
+        }
+
+        function moveSlashActiveIndex(delta) {
+          if (!slashMatches.length) {
+            return;
+          }
+
+          slashActiveIndex = (slashActiveIndex + delta + slashMatches.length) % slashMatches.length;
+          syncSlashActiveItem({ scroll: true });
+        }
+
+        function closeSlashMenu() {
+          slashMenuOpen = false;
+          slashMatches = [];
+          slashActiveIndex = 0;
+          slashMenuEl.innerHTML = "";
+          slashMenuEl.classList.remove("is-open");
+        }
+
+        function runSlashCommand(command) {
+          if (!command) {
+            return;
+          }
+
+          closeSlashMenu();
+          promptEl.value = "";
+          saveCurrentDraft();
+          promptEl.focus();
+
+          if (command.client === "help") {
+            addMessage("assistant", buildSlashHelpText(), { scroll: true });
+            statusEl.textContent = "Slash commands shown.";
+            return;
+          }
+
+          if (command.client === "newSession") {
+            newSessionButton.click();
+            return;
+          }
+
+          statusEl.textContent = "Running " + command.name + "...";
+          vscode.postMessage({
+            type: "slashCommand",
+            command: command.id,
+            baseSessionId: activeBaseSessionId
+          });
+        }
+
+        function runSlashCommandFromPrompt() {
+          const value = (promptEl.value || "").trim().toLowerCase();
+          if (value === "help") {
+            runSlashCommand(slashCommands[0]);
+            return true;
+          }
+          if (!value.startsWith("/") && !value.startsWith("／")) {
+            return false;
+          }
+
+          const command = slashCommands.find(function (item) {
+            return value === item.name || value === item.name.slice(1);
+          });
+          if (command) {
+            runSlashCommand(command);
+            return true;
+          }
+
+          if (slashMatches.length) {
+            runSlashCommand(slashMatches[slashActiveIndex] || slashMatches[0]);
+            return true;
+          }
+
+          addMessage("error", "Unknown slash command. Type /help to see available shortcuts.", { scroll: true });
+          promptEl.value = "";
+          saveCurrentDraft();
+          closeSlashMenu();
+          return true;
+        }
+
+        function buildSlashHelpText() {
+          return [
+            "Available Mochi shortcuts:",
+            "",
+            ...slashCommands.map(function (command) {
+              return "- " + command.name + ": " + command.title;
+            })
+          ].join("\\n");
+        }
+
         window.sendPrompt = function () {
           const prompt = promptEl.value.trim();
           if (!prompt) {
             statusEl.textContent = "Type a prompt first.";
+            return;
+          }
+          if (runSlashCommandFromPrompt()) {
             return;
           }
           if (loadedBaseSessionId !== activeBaseSessionId) {
@@ -1182,6 +1529,23 @@ function getWebviewHtml({ logoUri = "" } = {}) {
 
         promptEl.addEventListener("input", function () {
           saveCurrentDraft();
+          updateSlashMenu();
+        });
+
+        promptEl.addEventListener("keyup", function (event) {
+          if (["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
+            return;
+          }
+          updateSlashMenu();
+        });
+
+        privateToggleButton.addEventListener("click", function () {
+          privateToggleButton.disabled = true;
+          statusEl.textContent = privateWindowOn ? "Turning private mode off..." : "Turning private mode on...";
+          vscode.postMessage({
+            type: "togglePrivateWindow",
+            baseSessionId: activeBaseSessionId
+          });
         });
 
         window.addEventListener("error", function (event) {
@@ -1193,6 +1557,40 @@ function getWebviewHtml({ logoUri = "" } = {}) {
 
         promptEl.addEventListener("keydown", function (event) {
           if (event.isComposing || event.keyCode === 229) {
+            return;
+          }
+
+          if ((event.key === "/" || event.key === "／") && !slashMenuOpen) {
+            requestAnimationFrame(function () {
+              updateSlashMenu();
+              if (!slashMenuOpen) {
+                openSlashMenu("");
+              }
+            });
+            return;
+          }
+
+          if (slashMenuOpen && event.key === "ArrowDown") {
+            event.preventDefault();
+            moveSlashActiveIndex(1);
+            return;
+          }
+
+          if (slashMenuOpen && event.key === "ArrowUp") {
+            event.preventDefault();
+            moveSlashActiveIndex(-1);
+            return;
+          }
+
+          if (slashMenuOpen && (event.key === "Tab" || event.key === "Enter") && !event.shiftKey) {
+            event.preventDefault();
+            runSlashCommand(slashMatches[slashActiveIndex] || slashMatches[0]);
+            return;
+          }
+
+          if (slashMenuOpen && event.key === "Escape") {
+            event.preventDefault();
+            closeSlashMenu();
             return;
           }
 
@@ -1291,9 +1689,26 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             return;
           }
 
+          if (message.type === "slashCommandResult") {
+            statusEl.textContent = message.ok ? "Command finished." : (message.value || "Command failed.");
+            privateToggleButton.disabled = false;
+            return;
+          }
+
+          if (message.type === "memoryPolicy") {
+            if (message.baseSessionId && message.baseSessionId !== activeBaseSessionId) {
+              return;
+            }
+            const policy = message.value || {};
+            setPrivateWindowState(Boolean(policy.privateWindow));
+            privateToggleButton.disabled = false;
+            return;
+          }
+
           if (message.type === "prefill") {
             promptEl.value = "Please help with this code:\\n\\n" + message.value;
             saveCurrentDraft();
+            closeSlashMenu();
             promptEl.focus();
             statusEl.textContent = "Selection added to the prompt box.";
             return;

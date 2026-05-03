@@ -23,6 +23,7 @@ class ChatController {
     this.createNewSession = options.createNewSession;
     this.switchSession = options.switchSession;
     this.deleteSession = options.deleteSession;
+    this.ensureModelConfigured = options.ensureModelConfigured || null;
     this.sessionSyncVersion = 0;
   }
 
@@ -95,6 +96,8 @@ class ChatController {
       syncVersion,
     });
 
+    await this.syncMemoryPolicy(baseSessionId, syncVersion);
+
     const messages = await this.runtime.getCurrentSessionMessagesForUi(baseSessionId);
     if (syncVersion !== this.sessionSyncVersion) {
       return;
@@ -121,6 +124,24 @@ class ChatController {
       type: "sessionInfo",
       value: baseSessionId,
     });
+    await this.syncMemoryPolicy(baseSessionId);
+  }
+
+  async syncMemoryPolicy(baseSessionId, syncVersion = null) {
+    if (!this.runtime.getMemoryControlsForUi) {
+      return;
+    }
+
+    const controls = await this.runtime.getMemoryControlsForUi(baseSessionId);
+    if (syncVersion !== null && syncVersion !== this.sessionSyncVersion) {
+      return;
+    }
+    this.postToChatView({
+      type: "memoryPolicy",
+      value: controls.policy || {},
+      baseSessionId,
+      syncVersion,
+    });
   }
 
   async handleWebviewMessage(message) {
@@ -134,11 +155,34 @@ class ChatController {
       return;
     }
 
+    if (message.type === "slashCommand") {
+      await this.handleSlashCommand(message.command);
+      return;
+    }
+
+    if (message.type === "togglePrivateWindow") {
+      await this.handleSlashCommand("togglePrivateWindow");
+      return;
+    }
+
     if (message.type === "send") {
       const runBaseSessionId =
         message.baseSessionId ||
         (this.runtime.getBaseSessionId ? this.runtime.getBaseSessionId() : "");
       try {
+        if (this.ensureModelConfigured) {
+          const configured = await this.ensureModelConfigured();
+          if (!configured) {
+            if (this.isCurrentSession(runBaseSessionId)) {
+              this.postToChatView({
+                type: "error",
+                value: "Mochi needs a model API key before it can chat. Run `Mochi: Configure Model Credentials` from the Command Palette.",
+                baseSessionId: runBaseSessionId,
+              });
+            }
+            return;
+          }
+        }
         const reply = await this.runtime.sendMessage(message.prompt, {
           includeEditorContext: message.includeSelection,
           baseSessionId: runBaseSessionId,
@@ -283,6 +327,55 @@ class ChatController {
         type: "clearActivity",
       });
       this.vscode.window.showErrorMessage(error.message || String(error));
+    }
+  }
+
+  async handleSlashCommand(command) {
+    const commandMap = {
+      configureModel: "localAgent.configureModelCredentials",
+      memoryControls: "localAgent.openMemoryControls",
+      memorySnapshot: "localAgent.openMemorySnapshot",
+      rawMemorySnapshot: "localAgent.openRawMemorySnapshot",
+      togglePrivateWindow: "localAgent.togglePrivateWindowMode",
+      togglePersistentMemory: "localAgent.togglePersistentMemoryRead",
+      toggleSessionIsolation: "localAgent.toggleSessionMemoryIsolation",
+      destroyCurrentWindowArtifacts: "localAgent.destroyCurrentWindowArtifacts",
+      clearCurrentMemory: "localAgent.clearCurrentSessionMemory",
+      clearSessionSummaryMemory: "localAgent.clearCurrentSessionSummaryMemory",
+      clearTaskMemory: "localAgent.clearCurrentTaskMemory",
+      clearWorkspaceMemory: "localAgent.clearCurrentWorkspaceMemory",
+      clearUserMemory: "localAgent.clearUserMemory",
+      clearTraceMemory: "localAgent.clearCurrentTraceMemory",
+      clearAllMemory: "localAgent.clearAllMemory",
+      selectWorkspace: "localAgent.selectWorkspaceFolder",
+      sendSelection: "localAgent.sendSelection",
+      insertLastReply: "localAgent.applyLastReply",
+    };
+    const targetCommand = commandMap[command];
+    if (!targetCommand) {
+      this.postToChatView({
+        type: "slashCommandResult",
+        ok: false,
+        value: "Unknown slash command.",
+      });
+      return;
+    }
+
+    try {
+      await this.vscode.commands.executeCommand(targetCommand);
+      this.postToChatView({
+        type: "slashCommandResult",
+        ok: true,
+        value: "Command finished.",
+      });
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      this.vscode.window.showErrorMessage(message);
+      this.postToChatView({
+        type: "slashCommandResult",
+        ok: false,
+        value: message,
+      });
     }
   }
 
