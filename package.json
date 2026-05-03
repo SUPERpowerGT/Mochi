@@ -17,6 +17,12 @@
     "@openai/agents": "^0.1.0",
     "zod": "^3.25.40"
   },
+  "scripts": {
+    "test": "node --test --test-reporter=spec \"test/unit/*.test.js\"",
+    "test:watch": "node --test --watch --test-reporter=spec \"test/unit/*.test.js\"",
+    "test:file": "node --test --test-reporter=spec",
+    "test:coverage": "node --test --experimental-test-coverage --test-reporter=spec \"test/unit/*.test.js\""
+  },
   "categories": [
     "Other"
   ],

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mochi LLMOps Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; padding: 24px; }
+  h1 { font-size: 22px; font-weight: 600; color: #f0f6fc; margin-bottom: 4px; }
+  .meta { color: #8b949e; font-size: 12px; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 24px; border-bottom: 1px solid #21262d; }
+  .tab-btn { background: none; border: none; color: #8b949e; padding: 8px 20px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab-btn.active { color: #f0f6fc; border-bottom-color: #58a6ff; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .section { margin-bottom: 32px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px 20px; min-width: 160px; flex: 1; }
+  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+  .stat-label { font-size: 12px; color: #8b949e; }
+  .chart-wrap { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+  th { text-align: left; padding: 10px 14px; font-size: 12px; color: #8b949e; background: #0d1117; border-bottom: 1px solid #21262d; }
+  td { padding: 9px 14px; border-bottom: 1px solid #161b22; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #0d1117; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green  { background: #1a3d2b; color: #3fb950; }
+  .badge-red    { background: #3d1a1a; color: #f85149; }
+  .badge-yellow { background: #3d2e1a; color: #d29922; }
+  .empty { color: #8b949e; font-style: italic; padding: 16px; text-align: center; }
+  code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; color: #79c0ff; }
+</style>
+</head>
+<body>
+<h1>Mochi LLMOps Report</h1>
+<div class="meta">Generated: 4/22/2026, 5:46:23 PM &nbsp;|&nbsp; Sessions scanned: 2 &nbsp;|&nbsp; Traces found: 2</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('sec', this)">LLMSecOps</button>
+  <button class="tab-btn" onclick="switchTab('eval', this)">Evaluation &amp; Testing</button>
+</div>
+
+<div id="tab-sec" class="tab-panel active">
+
+    <div class="section">
+      <div class="section-title">Security Overview</div>
+      
+    <div class="stat-row">
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#58a6ff">2</div>
+      <div class="stat-label">Total Runs</div>
+    </div>
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#f85149">0</div>
+      <div class="stat-label">High-Risk Actions</div>
+    </div>
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#d29922">1</div>
+      <div class="stat-label">Approval Requests</div>
+    </div>
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#f85149">0</div>
+      <div class="stat-label">Denied Operations</div>
+    </div>
+    </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Risk Distribution</div>
+      
+    <div class="chart-wrap" style="max-width:340px">
+      <canvas id="riskChart" height="220"></canvas>
+    </div>
+    <script>
+    (function() {
+      const ctx = document.getElementById("riskChart").getContext("2d");
+      new Chart(ctx, {
+        type: "doughnut",
+        data: {
+          labels: ["Low Risk", "Medium Risk", "High Risk"],
+          datasets: [{
+            data: [1, 1, 0],
+            backgroundColor: ["#238636", "#d29922", "#f85149"],
+            borderColor: "#161b22",
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: "#c9d1d9", font: { size: 12 } } },
+            title: { display: true, text: "Tool Call Risk Distribution", color: "#8b949e", font: { size: 13 } }
+          }
+        }
+      });
+    })();
+    </script>
+    </div>
+    <div class="section">
+      <div class="section-title">Approval Audit Log</div>
+      
+    <table>
+      <thead><tr><th>Time</th><th>Action</th><th>File</th><th>Decision</th></tr></thead>
+      <tbody><tr><td>4/22/2026, 5:45:46 PM</td><td><code>run_command</code></td><td><code>/Users/zyc/PycharmProjects/RAGProject</code></td><td><span class="badge badge-green">approved</span></td></tr></tbody>
+    </table>
+    </div>
+</div>
+
+<div id="tab-eval" class="tab-panel">
+
+    <div class="section">
+      <div class="section-title">Verification Quality</div>
+      
+    <div class="stat-row">
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#3fb950">N/A</div>
+      <div class="stat-label">Verification Pass Rate</div>
+    </div>
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#d29922">N/A</div>
+      <div class="stat-label">Skipped (No Verification)</div>
+    </div>
+      
+    <div class="stat-card">
+      <div class="stat-value" style="color:#f85149">N/A</div>
+      <div class="stat-label">Verification Failed Rate</div>
+    </div>
+    </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Sub-agent Delegation</div>
+      
+    <div class="chart-wrap" style="max-width:480px">
+      <canvas id="agentChart" height="200"></canvas>
+    </div>
+    <script>
+    (function() {
+      const ctx = document.getElementById("agentChart").getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["repo_guide","coding","plan_reviewer","review"],
+          datasets: [{
+            label: "Delegations",
+            data: [0,0,0,0],
+            backgroundColor: ["#58a6ff","#3fb950","#d29922","#a5a5ff"],
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: "Sub-agent Delegation Frequency", color: "#8b949e", font: { size: 13 } }
+          },
+          scales: {
+            x: { ticks: { color: "#c9d1d9" }, grid: { color: "#21262d" } },
+            y: { ticks: { color: "#c9d1d9", stepSize: 1 }, grid: { color: "#21262d" }, beginAtZero: true }
+          }
+        }
+      });
+    })();
+    </script>
+    </div>
+    <div class="section">
+      <div class="section-title">Tool Success Rate</div>
+      
+    <table>
+      <thead><tr><th>Tool</th><th>Total Calls</th><th>Succeeded</th><th>Failed</th><th>Success Rate</th></tr></thead>
+      <tbody><tr>
+          <td><code>read_file</code></td>
+          <td>1</td>
+          <td>1</td>
+          <td>0</td>
+          <td><span class="badge badge-green">100%</span></td>
+        </tr><tr>
+          <td><code>run_command</code></td>
+          <td>1</td>
+          <td>0</td>
+          <td>1</td>
+          <td><span class="badge badge-red">0%</span></td>
+        </tr></tbody>
+    </table>
+    </div>
+</div>
+
+<script>
+function switchTab(id, btn) {
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + id).classList.add("active");
+  btn.classList.add("active");
+}
+</script>
+</body>
+</html>
