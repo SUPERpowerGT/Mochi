@@ -991,17 +991,35 @@ Why it matters:
 
 Follow-up direction:
 
-- add `memory_events.json` and a `MemoryEventStore`
+- move archive, commit, block, and event decisions into a dedicated Memory Controller
 - split trace/debug memory into a dedicated store
-- make `MemoryCommit` explicit after each run
 - add explicit remember/forget flows
-- design the current-window-to-long-term promotion trigger before implementing automatic promotion
 - replace Memory Controls QuickPick with a category-based management panel
 - add closed-loop integration tests for every memory layer
 
+## Phase 48: Initial Memory V2 Commit And Archive Path
+
+Mochi gained the first JSON-backed Memory V2 implementation path.
+
+What changed:
+
+- added `long_term_memory.json` through `LongTermMemoryStore`
+- added `memory_events.json` through `MemoryEventStore`
+- `MemoryManager.finalizeRun` now returns an initial `MemoryCommit`
+- non-private current-window artifact deletion now archives safe current-window context as a `kind: "window_archive"` Long-Term Memory record
+- Private current-window artifact deletion blocks long-term archive and records a blocked memory event
+- memory snapshots and controls now include long-term memory counts and memory event counts
+- tests cover MemoryCommit, non-private window archive, and Private archive blocking
+
+Why it matters:
+
+- Memory V2 is no longer only documentation; it has a first durable commit/event/archive path
+- Private mode now has tested write-side protection, not only read-side isolation
+- future memory work can move policy and archive decisions into a dedicated Memory Controller instead of growing `MemoryManager`
+
 ## Next Likely Steps
 
-- implement Memory V2 storage and event logging
+- extract a dedicated Memory Controller from the initial Memory V2 implementation
 - add explicit remember/forget flows
 - turn Memory Controls into a category-based management panel
 - add a memory selector to reduce overlap between current-window summaries, internal working state, and long-term memory

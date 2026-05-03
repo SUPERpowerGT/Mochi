@@ -8,11 +8,11 @@ This folder keeps the project development log and the current product/runtime no
 - `current-architecture.md`: current code structure, runtime boundaries, and major design decisions.
 - `current-features-and-usage.md`: what is currently usable, how to run it, and known limits.
 - `architecture-design-doc-template.zh.md`: Chinese template for architecture design docs, including boundaries, ownership, lifecycle, storage, rules, invariants, decisions, and examples.
-- `local-memory-cache.zh.md`: Chinese target database design for Mochi's local runtime memory cache, including SQLite tables, backend-sync boundaries, invariants, and migration phases.
-- `memory-model.md`: English source-of-truth three-layer memory model, including Current Window Memory, Long-Term Memory, Runtime Trace, storage, lifecycle, archive/delete rules, Private mode, and controller boundaries.
+- `memory-model.md`: English source-of-truth three-layer memory product/system contract, including Current Window Memory, Long-Term Memory, Runtime Trace, storage, lifecycle, archive/delete rules, Private mode, and controller boundaries.
 - `memory-model.zh.md`: Chinese version of the memory model.
+- `memory-v2.md`: current JSON-backed implementation plan and status for Memory V2.
 - `current-window-memory.zh.md`: detailed Chinese breakdown of Current Window Memory, including what each current-window data group does, where it is stored, and whether it should remain local or become backend-syncable.
-- `memory-v2.md`: implementation plan for the next memory refactor.
+- `local-memory-cache.zh.md`: Chinese target database design for Mochi's future local runtime memory cache, including SQLite tables, backend-sync boundaries, invariants, and migration phases.
 - `ultimate-goal.md`: long-term vision, target system layers, and staged evolution path.
 - `roadmap.md`: practical staged plan for what should be built next and what should wait.
 - `commands-and-capabilities.md`: all current commands and the practical capability each one provides.
@@ -23,13 +23,14 @@ The docs currently reflect these recent project upgrades:
 
 - the VS Code extension now runs on the JavaScript OpenAI Agents SDK path
 - tools are split into workspace, file, and editor groups
-- memory documentation now treats the target local database schema as the source of truth for upcoming refactors
-- `local-memory-cache.zh.md` defines the target local database model; Markdown is design, SQLite is the intended runtime source of truth, and imports from pre-refactor storage are a migration concern
+- memory documentation now separates the product contract, current JSON implementation plan, current-window detail, and future database target
+- `memory-model.md` and `memory-model.zh.md` are the source of truth for memory semantics; `memory-v2.md` tracks current JSON-backed implementation work; `local-memory-cache.zh.md` is the future SQLite/local-database target design
 - the memory model now has exactly three layers: Current Window Memory, Long-Term Memory, and Runtime Trace
 - `architecture-design-doc-template.zh.md` defines the structure future architecture docs should follow
 - `memory-model.md` and `memory-model.zh.md` now define layer boundaries, Long-Term Memory record kinds, current-window storage details, lifecycle, archive/delete behavior, Private mode restrictions, and Memory Controller boundaries
 - `current-window-memory.zh.md` is now structured as an architecture design doc, with goals, non-goals, scope ownership, memory classification, lifecycle, storage, rules, invariants, decisions, and examples
 - Memory V2 now tracks the implementation direction for storage, write policy, and memory event logging
+- Memory V2 has an initial JSON-backed implementation for `long_term_memory.json`, `memory_events.json`, `MemoryCommit`, and non-private `window_archive`
 - memory snapshots can be opened directly from VS Code
 - the chat panel now exposes Private mode as a direct current-window toggle
 - the slash menu is intentionally small and no longer tries to duplicate the full tools or memory management surface
@@ -50,11 +51,11 @@ If you are new to the repo, the most useful order is:
 2. `current-architecture.md`
 3. `commands-and-capabilities.md`
 4. `architecture-design-doc-template.zh.md`
-5. `local-memory-cache.zh.md`
-6. `memory-model.md`
-7. `memory-model.zh.md`
+5. `memory-model.md`
+6. `memory-model.zh.md`
+7. `memory-v2.md`
 8. `current-window-memory.zh.md`
-9. `memory-v2.md`
+9. `local-memory-cache.zh.md`
 10. `roadmap.md`
 11. `ultimate-goal.md`
 12. `development-log.md`

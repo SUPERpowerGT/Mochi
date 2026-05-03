@@ -248,11 +248,11 @@ async function activate(context) {
     }),
     vscode.commands.registerCommand("localAgent.destroyCurrentWindowArtifacts", async () => {
       const confirmed = await vscode.window.showWarningMessage(
-        "Delete this Mochi window's chat messages, working state, trace, and routing artifacts? Other windows stay untouched.",
+        "Archive this non-private Mochi window to long-term memory, then delete its chat messages, working state, trace, and routing artifacts? Private windows are discarded without archive. Other windows stay untouched.",
         { modal: true },
-        "Delete Window Artifacts"
+        "Archive And Delete"
       );
-      if (confirmed !== "Delete Window Artifacts") {
+      if (confirmed !== "Archive And Delete") {
         return;
       }
       await runtime.destroyCurrentWindowArtifactsForUi(activeBaseSessionId);

@@ -209,14 +209,14 @@ This installs:
 
 - multi-agent specialization is still lightweight
 - memory exists, but agent-specific memory slicing is still a future step
-- memory exists, but the full Memory V2 commit pipeline and memory event log are still future work
+- Memory V2 has an initial commit/event/archive path, but archive, policy, and event decisions still need to move into a dedicated Memory Controller
 - internal working state, session summaries, and referenced memories can still overlap because a dedicated memory selector has not been added yet
 - streamed replies now work, but the chat reading experience still needs more typography and layout polish
 - the current memory layer is persistent and useful, but still intentionally simple
 - task routing is now more structured, but it still relies mostly on prompt-level signals rather than richer task signals
 - explicit "remember this" and "forget this" flows are not implemented yet
 - trace storage is still session-attached rather than split into a dedicated trace store
-- additional automatic promotion from Current Window Memory to Long-Term Memory is still an open design decision beyond the planned non-private window archive path
+- additional automatic promotion from Current Window Memory to Long-Term Memory is still an open design decision beyond the implemented non-private window archive path
 - turn classification is currently heuristic, so some ambiguous inputs may still need better generic signals over time
 - destructive file tools now have a first interactive approval guard, but it is still narrower than a full approval framework
 - the runtime now uses character-based context budgets, not token-accurate budgets

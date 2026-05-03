@@ -188,7 +188,7 @@ test("finalizeRun applies persistent memory policy for the run base session", as
     baseSessionId: "session-b",
   });
 
-  await manager.finalizeRun({
+  const finalizeResult = await manager.finalizeRun({
     baseSessionId: "session-b",
     sessionId: sessionBId,
     taskId: memoryState.taskId,
@@ -200,8 +200,61 @@ test("finalizeRun applies persistent memory policy for the run base session", as
   });
 
   const sessionBTasks = await manager.taskStore.listTasksForSession(sessionBId);
+  const events = await manager.memoryEventStore.listEvents();
   assert.equal(sessionBTasks.length, 1);
   assert.equal(sessionBTasks[0].summary.includes("implemented"), true);
+  assert.equal(finalizeResult.memoryCommit.kind, "MemoryCommit");
+  assert.equal(finalizeResult.memoryCommit.baseSessionId, "session-b");
+  assert.equal(finalizeResult.memoryCommit.wroteCurrentWindow, true);
+  assert.equal(finalizeResult.memoryCommit.wroteWorkingState, true);
+  assert.equal(events.some((event) => event.action === "finalize_run"), true);
+});
+
+test("destroyCurrentWindowArtifactsForUi archives non-private windows into long-term memory", async () => {
+  const manager = createMemoryManager();
+  const workspaceRoot = manager.getWorkspaceRoot();
+  const workspaceId = createWorkspaceId(workspaceRoot);
+  const sessionId = createSessionId("session-a", workspaceId);
+  await manager.sessionStore.getOrCreateSession(sessionId, workspaceId);
+  await manager.sessionStore.setHistory(sessionId, createMessageHistory(), "remember this project decision");
+  await manager.sessionStore.updateSession(sessionId, (item) => {
+    item.summary = "We decided to keep Mochi memory local-first and archive windows safely.";
+  });
+
+  await manager.destroyCurrentWindowArtifactsForUi("session-a");
+
+  const records = await manager.longTermMemoryStore.listRecords({ workspaceId });
+  const events = await manager.memoryEventStore.listEvents();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].kind, "window_archive");
+  assert.equal(records[0].scope, "workspace");
+  assert.equal(records[0].text.includes("local-first"), true);
+  assert.equal(events.some((event) =>
+    event.action === "create_window_archive" &&
+    event.status === "completed" &&
+    event.recordId === records[0].id
+  ), true);
+});
+
+test("private window artifact deletion does not create long-term archives", async () => {
+  const manager = createMemoryManager();
+  const workspaceRoot = manager.getWorkspaceRoot();
+  const workspaceId = createWorkspaceId(workspaceRoot);
+  const sessionId = createSessionId("session-a", workspaceId);
+  await manager.sessionStore.getOrCreateSession(sessionId, workspaceId);
+  await manager.sessionStore.setHistory(sessionId, createMessageHistory(), "private memory should not archive");
+  await manager.setPrivateWindowModeForUi("session-a", true);
+
+  await manager.destroyCurrentWindowArtifactsForUi("session-a");
+
+  const records = await manager.longTermMemoryStore.listRecords({ workspaceId });
+  const events = await manager.memoryEventStore.listEvents();
+  assert.equal(records.length, 0);
+  assert.equal(events.some((event) =>
+    event.action === "create_window_archive" &&
+    event.status === "blocked" &&
+    event.reason === "private-window-blocks-long-term-archive"
+  ), true);
 });
 
 test("granular memory clear methods clear only their memory category", async () => {

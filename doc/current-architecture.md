@@ -431,6 +431,7 @@ The target model keeps the current JSON-first approach but makes memory lifecycl
 - `tasks.json` for internal working state during the transition; it is not the target user-facing memory model
 - `workspaces.json` for detected and confirmed workspace facts
 - `user.json` for stable user preferences
+- `long_term_memory.json` for first-class Long-Term Memory records such as `kind: "window_archive"`
 - `traces.json` for run/debug evidence that should not usually be injected as long-term model context
 - `memory_events.json` for audit records explaining why memory was added, updated, deleted, or skipped
 
@@ -474,7 +475,7 @@ Private mode is a hard policy boundary for the current window:
 - may keep current-window working state only inside the current window
 - keep only current-window debug artifacts until the user deletes current-window artifacts
 
-The current implementation already enforces the main read-side behavior by setting `disablePersistentMemory` and `isolateSession` for Private mode. The next step is to make write-side commits and memory event logging explicit.
+The current implementation already enforces the main read-side behavior by setting `disablePersistentMemory` and `isolateSession` for Private mode. It also has an initial write-side path: `finalizeRun` returns a `MemoryCommit`, non-private current-window artifact deletion creates a `kind: "window_archive"` Long-Term Memory record, and Private mode blocks that archive while recording a memory event.
 
 ## Known Architectural Constraints
 
@@ -482,10 +483,10 @@ The current implementation already enforces the main read-side behavior by setti
 - memory writes are simple and local
 - agent-specific memory slicing exists in a lightweight form, but it is not yet a full selector/deduper
 - there is no dedicated memory selector yet, so internal working state and session summaries may occasionally repeat related context
-- the memory maintainer exists for compacted summary cleanup, but the broader Memory V2 commit pipeline is not implemented yet
+- the memory maintainer exists for compacted summary cleanup, but the broader Memory V2 commit pipeline still needs a dedicated Memory Controller
 - task-like working state is still intentionally lightweight and currently relies mainly on prompt-level signals
-- explicit memory events, explicit remember/forget commands, and a dedicated trace store are not implemented yet
-- non-private window archive/delete is the intended first promotion path into a `kind: "window_archive"` Long-Term Memory record; additional automatic promotion remains undesigned
+- explicit remember/forget commands and a dedicated trace store are not implemented yet
+- non-private window archive/delete is implemented as the first promotion path into a `kind: "window_archive"` Long-Term Memory record; additional automatic promotion remains undesigned
 - turn classification is still heuristic and local rather than model-backed
 - the project does not yet use the OpenAI SDK session abstraction as its primary persisted session layer
 - destructive approval currently covers file deletion and file clearing, but it is not yet a broader action approval framework

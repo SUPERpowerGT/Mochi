@@ -188,7 +188,7 @@ Long-Term Memory is one layer with multiple `record.kind` values.
 | --- | --- | --- |
 | `user.json` | user-level durable preferences | migrate to unified `long_term_memory.json` records with `scope: "user"` |
 | `workspaces.json` | workspace/project detected facts and conventions | migrate to unified `long_term_memory.json` records with `scope: "workspace"` |
-| not first-class yet | window archives | add `kind: "window_archive"` in `long_term_memory.json` or a dedicated archive store backed by the same schema |
+| `long_term_memory.json` | first-class Long-Term Memory records; currently used for `kind: "window_archive"` | expand to include user preferences, project facts/conventions, and decisions under the same schema |
 
 ### Target Record Shape
 

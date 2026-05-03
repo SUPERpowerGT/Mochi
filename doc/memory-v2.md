@@ -42,12 +42,15 @@ Current stores:
 - `tasks.json` as internal working state, not user-facing long-term memory
 - `workspaces.json`
 - `user.json`
+- `long_term_memory.json` for first-class long-term records such as `kind: "window_archive"`
+- `memory_events.json` for audit records explaining memory commits, archives, blocks, and skips
 
 Current readable memory sources:
 
 - current session history
 - compacted current-session summary
 - current-window working state
+- active long-term memory records for the workspace when persistent memory reads are enabled
 - recent session summaries when the user asks a recall-style question
 - detected workspace facts
 - lightweight user preferences such as preferred language
@@ -63,14 +66,14 @@ Current controls:
 
 Current gaps:
 
-- no unified memory commit pipeline
-- no memory event log explaining why facts were written, updated, or deleted
+- the memory commit pipeline exists as an initial `MemoryCommit` object, but it is still coordinated inside `MemoryManager` rather than a dedicated Memory Controller
+- memory events exist for run finalization and window archive decisions, but explicit remember/forget events are not implemented yet
 - workspace facts are mostly auto-detected rather than user-confirmed
 - user memory is intentionally narrow
 - task-like state is still stored as a separate internal implementation detail
 - trace data lives with session state instead of having a clearer debug-memory boundary
 - explicit "remember this" and "forget this" user flows are not implemented yet
-- non-private window archive/delete is the first intended trigger for creating a `kind: "window_archive"` Long-Term Memory record
+- non-private window archive/delete now creates a `kind: "window_archive"` Long-Term Memory record; Private mode blocks this and records a blocked event
 - additional automatic promotion beyond archive/delete is not decided yet
 
 ## Storage Layout
@@ -85,6 +88,7 @@ mochi-memory/
   tasks.json        # internal working state, not user-facing memory
   workspaces.json
   user.json
+  long_term_memory.json
   traces.json
   memory_events.json
 ```
@@ -96,8 +100,9 @@ JSON remains a good fit for the next phase because it is:
 - easy to reset during tests
 - simple to evolve without adding a database dependency
 
-The new files should be introduced when the implementation needs them:
+The new files are introduced incrementally:
 
+- `long_term_memory.json` stores first-class Long-Term Memory records.
 - `traces.json` separates debug traces from session memory.
 - `memory_events.json` records why memory changed.
 
@@ -533,8 +538,8 @@ Required test journeys:
 
 ## Implementation Plan
 
-1. Add `memory_events.json` and a `MemoryEventStore`.
-2. Add an explicit `MemoryCommit` object returned by `finalizeRun`.
+1. Add `memory_events.json` and a `MemoryEventStore`. Done for the initial JSON implementation.
+2. Add an explicit `MemoryCommit` object returned by `finalizeRun`. Done for the initial JSON implementation.
 3. Move trace persistence toward a dedicated trace store.
 4. Add explicit memory commands:
    - remember this
@@ -544,8 +549,8 @@ Required test journeys:
 6. Collapse the user-facing memory model to Current Window Memory and Long-Term Memory.
 7. Reclassify task storage as internal working state.
 8. Add closed-loop tests for Current Window Memory and Long-Term Memory.
-9. Decide and implement the current-window-to-long-term promotion trigger.
-10. Add stricter policy checks so Private mode cannot accidentally write durable memory.
+9. Decide and implement the current-window-to-long-term promotion trigger. Initial trigger implemented: non-private archive/delete creates `kind: "window_archive"`.
+10. Add stricter policy checks so Private mode cannot accidentally write durable memory. Initial archive block implemented.
 11. Add safer user-memory promotion rules.
 
 ## Current Implementation Notes
@@ -554,12 +559,17 @@ The current code already has useful foundations:
 
 - `MemoryManager.prepareRun` builds memory context.
 - `MemoryManager.finalizeRun` commits history, compaction, trace, and task updates.
+- `MemoryManager.finalizeRun` returns an initial `MemoryCommit`.
+- `LongTermMemoryStore` persists `long_term_memory.json`.
+- `MemoryEventStore` persists `memory_events.json`.
+- non-private current-window artifact deletion archives safe current-window context as `kind: "window_archive"`.
+- Private current-window artifact deletion blocks long-term archive and records a blocked event.
 - task updates are currently implementation working state, not the target user-facing memory model.
 - current-window Private mode sets:
   - `privateWindow: true`
   - `isolateSession: true`
   - `disablePersistentMemory: true`
 - run finalization now applies persistent-memory policy using the run's base session id, not the runtime's current active session id.
-- current-window artifact deletion deletes the current session record and linked task artifacts while leaving other sessions untouched.
+- current-window artifact deletion archives non-private windows first, then deletes the current session record and linked task artifacts while leaving other sessions untouched.
 
-The next implementation should keep these foundations but make the policy and write pipeline explicit.
+The next implementation should keep these foundations but move archive, commit, block, and event decisions into a dedicated Memory Controller.

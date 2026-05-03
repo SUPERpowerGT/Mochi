@@ -107,18 +107,17 @@ Turn the current memory foundation into an explicit, inspectable memory system.
 - define what can become long-term memory
 - keep the product model strict: Current Window Memory, Long-Term Memory, and Runtime Trace
 - keep Private mode as a hard read/write boundary
-- add memory event logging
+- expand memory event logging beyond run finalization and window archive decisions
 - make task-like state internal working state rather than user-facing memory
 - make trace/debug state distinct from long-term knowledge
 - make memory management visible and testable
 
 ### Likely Work
 
-- add `memory_events.json` and `MemoryEventStore`
-- add a `MemoryCommit` decision after each completed run
+- move archive, commit, block, and event decisions into a dedicated Memory Controller
 - split trace/debug artifacts toward `traces.json`
 - add explicit remember/forget flows
-- implement non-private window archive/delete as the first Current Window Memory to Long-Term Memory path, producing `kind: "window_archive"`
+- expand the implemented non-private window archive/delete path and make discard-without-archive explicit
 - keep discard-without-archive as a separate confirmed destructive action
 - ensure natural-language delete requests create proposals only, never direct deletion
 - replace Memory Controls QuickPick with a category-based management panel

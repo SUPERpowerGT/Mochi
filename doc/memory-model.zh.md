@@ -190,7 +190,7 @@ Discard 的意思是：删除当前窗口产物，不保存 archive。
 | --- | --- | --- |
 | `user.json` | 用户级长期偏好 | 迁移到统一的 `long_term_memory.json`，记录带 `scope: "user"` |
 | `workspaces.json` | workspace/project 检测事实和约定 | 迁移到统一的 `long_term_memory.json`，记录带 `scope: "workspace"` |
-| 尚未一等实现 | 窗口归档 | 在 `long_term_memory.json` 加 `kind: "window_archive"`，或用专用 archive store 但复用同一 schema |
+| `long_term_memory.json` | 一等长期记忆记录；当前已用于 `kind: "window_archive"` | 后续把用户偏好、项目事实/约定和决策也收敛到同一 schema |
 
 ### 目标记录结构
 
