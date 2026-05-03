@@ -279,6 +279,188 @@ function createFileTools({ sdk, zod, getWorkspaceRoot, getRunState, requestAppro
       },
     }),
     tool({
+      name: "edit_file",
+      description:
+        "Replace an exact string within a file. Reads the current content, performs the replacement, and writes back. " +
+        "Fails if oldString is not found, or if it appears more than once and replaceAll is false. " +
+        "Use read_file first so the replacement target is fresh.",
+      parameters: z.object({
+        relativePath: z.string(),
+        oldString: z.string().describe("Exact text to find (must be unique in the file unless replaceAll is true)"),
+        newString: z.string().describe("Text to replace it with"),
+        replaceAll: z.boolean().default(false).describe("Replace every occurrence instead of requiring uniqueness"),
+      }),
+      execute: async ({ relativePath, oldString, newString, replaceAll = false }) => {
+        const workspaceRoot = requireWorkspaceRoot(getWorkspaceRoot);
+        const target = resolveWorkspacePath(workspaceRoot, relativePath);
+
+        return runSerializedFileMutation(target, async () => {
+          const existingContent = await fs.promises.readFile(target, "utf8").catch(() => null);
+
+          if (existingContent === null) {
+            return createToolResult({
+              ok: false,
+              kind: "file",
+              action: "edit_file",
+              path: relativePath,
+              message: `File not found: ${relativePath}`,
+            });
+          }
+
+          const staleResult = createStaleFileResultIfNeeded({
+            getRunState,
+            target,
+            relativePath,
+            action: "edit_file",
+            existingContent,
+          });
+          if (staleResult) {
+            return staleResult;
+          }
+
+          const occurrences = countOccurrences(existingContent, oldString);
+
+          if (occurrences === 0) {
+            return createToolResult({
+              ok: false,
+              kind: "file",
+              action: "edit_file",
+              path: relativePath,
+              message: `oldString not found in ${relativePath}. Use read_file to verify the exact content.`,
+              data: { occurrences: 0 },
+            });
+          }
+
+          if (occurrences > 1 && !replaceAll) {
+            return createToolResult({
+              ok: false,
+              kind: "file",
+              action: "edit_file",
+              path: relativePath,
+              message:
+                `oldString appears ${occurrences} times in ${relativePath}. ` +
+                "Provide more surrounding context to make it unique, or set replaceAll to true.",
+              data: { occurrences },
+            });
+          }
+
+          const updatedContent = replaceAll
+            ? existingContent.split(oldString).join(newString)
+            : existingContent.replace(oldString, newString);
+
+          await fs.promises.writeFile(target, updatedContent, "utf8");
+          recordFileSnapshot(getRunState, target, relativePath, updatedContent);
+
+          return createToolResult({
+            ok: true,
+            kind: "file",
+            action: "edit_file",
+            path: relativePath,
+            message: `Edited ${relativePath} (${occurrences} replacement${occurrences !== 1 ? "s" : ""})`,
+            summary: `Edited ${relativePath}`,
+            data: {
+              occurrences,
+              replaceAll,
+              bytes: Buffer.byteLength(updatedContent, "utf8"),
+            },
+          });
+        });
+      },
+    }),
+    tool({
+      name: "search_in_files",
+      description:
+        "Search for a pattern across all text files in the workspace (or a subdirectory). " +
+        "Returns matching lines with file path, line number, and surrounding context. " +
+        "Pattern is a JavaScript regular expression string (e.g. 'function\\s+myFn', 'TODO'). " +
+        "Use this instead of read_file when you need to locate code across the repo.",
+      parameters: z.object({
+        pattern: z.string().describe("JavaScript regex pattern to search for"),
+        directory: z.string().default(".").describe("Subdirectory to search in (default: workspace root)"),
+        caseSensitive: z.boolean().default(false),
+        maxResults: z.number().int().min(1).max(200).default(50),
+        fileGlob: z.string().default("").describe("Optional file extension filter, e.g. '.js' or '.ts'"),
+      }),
+      execute: async ({ pattern, directory = ".", caseSensitive = false, maxResults = 50, fileGlob = "" }) => {
+        const workspaceRoot = requireWorkspaceRoot(getWorkspaceRoot);
+        const searchRoot = resolveWorkspacePath(workspaceRoot, directory);
+
+        let regex;
+        try {
+          regex = new RegExp(pattern, caseSensitive ? "g" : "gi");
+        } catch {
+          return createToolResult({
+            ok: false,
+            kind: "file",
+            action: "search_in_files",
+            path: directory,
+            message: `Invalid regex pattern: ${pattern}`,
+          });
+        }
+
+        const matches = [];
+        const errors = [];
+        let filesScanned = 0;
+
+        await walkDirectory(searchRoot, workspaceRoot, async (absolutePath, relativePath) => {
+          if (matches.length >= maxResults) {
+            return false; // stop walking
+          }
+          if (fileGlob && !relativePath.endsWith(fileGlob)) {
+            return true;
+          }
+
+          let content;
+          try {
+            content = await fs.promises.readFile(absolutePath, "utf8");
+          } catch {
+            return true; // skip unreadable files
+          }
+
+          if (isBinaryContent(content)) {
+            return true;
+          }
+
+          filesScanned++;
+          const lines = content.split("\n");
+          regex.lastIndex = 0;
+
+          for (let i = 0; i < lines.length && matches.length < maxResults; i++) {
+            regex.lastIndex = 0;
+            if (regex.test(lines[i])) {
+              matches.push({
+                file: relativePath,
+                line: i + 1,
+                content: lines[i].trim(),
+                context: lines.slice(Math.max(0, i - 1), i + 2).map((l) => l.trim()),
+              });
+            }
+          }
+
+          return true;
+        });
+
+        const truncated = matches.length >= maxResults;
+
+        return createToolResult({
+          ok: true,
+          kind: "file",
+          action: "search_in_files",
+          path: directory,
+          message: truncated
+            ? `Found ${matches.length}+ matches (limit reached) in ${filesScanned} files`
+            : `Found ${matches.length} match${matches.length !== 1 ? "es" : ""} in ${filesScanned} files`,
+          summary: `Search "${pattern}": ${matches.length} match${matches.length !== 1 ? "es" : ""}`,
+          data: {
+            pattern,
+            matches,
+            filesScanned,
+            truncated,
+          },
+        });
+      },
+    }),
+    tool({
       name: "delete_dir",
       description:
         "Recursively delete a directory inside the active workspace. Refuses to delete files or the workspace root.",
@@ -424,6 +606,71 @@ function createContentFingerprint(content) {
   }
 
   return crypto.createHash("sha1").update(String(content)).digest("hex");
+}
+
+function countOccurrences(haystack, needle) {
+  if (!needle) {
+    return 0;
+  }
+
+  let count = 0;
+  let pos = 0;
+  while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+    count++;
+    pos += needle.length;
+  }
+
+  return count;
+}
+
+function isBinaryContent(content) {
+  // Heuristic: if >10% of the first 512 bytes are non-printable, treat as binary
+  const sample = content.slice(0, 512);
+  let nonPrintable = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i);
+    if (code === 0 || (code < 32 && code !== 9 && code !== 10 && code !== 13)) {
+      nonPrintable++;
+    }
+  }
+
+  return sample.length > 0 && nonPrintable / sample.length > 0.1;
+}
+
+async function walkDirectory(dir, workspaceRoot, visitor) {
+  const SKIP_DIRS = new Set([
+    "node_modules", ".git", ".svn", "dist", "build", "out",
+    ".next", ".nuxt", "__pycache__", ".venv", "venv", "coverage",
+    ".turbo", ".cache",
+  ]);
+
+  const stack = [dir];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const absolutePath = path.join(current, entry.name);
+      const relativePath = path.relative(workspaceRoot, absolutePath);
+
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name)) {
+          stack.push(absolutePath);
+        }
+      } else if (entry.isFile()) {
+        const shouldContinue = await visitor(absolutePath, relativePath);
+        if (shouldContinue === false) {
+          return;
+        }
+      }
+    }
+  }
 }
 
 async function runSerializedFileMutation(target, run) {

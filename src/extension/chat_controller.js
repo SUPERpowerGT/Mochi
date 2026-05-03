@@ -134,6 +134,11 @@ class ChatController {
       return;
     }
 
+    if (message.type === "openMemorySnapshot") {
+      await this.vscode.commands.executeCommand("localAgent.openMemorySnapshot");
+      return;
+    }
+
     if (message.type === "send") {
       const runBaseSessionId =
         message.baseSessionId ||
@@ -158,6 +163,8 @@ class ChatController {
           });
         }
         await this.syncSessionTabs();
+        // Best-effort: push trace summary to webview after run completes
+        this.pushTraceToWebview(runBaseSessionId).catch(() => {});
       } catch (error) {
         if (this.isCurrentSession(runBaseSessionId)) {
           this.setPendingReplyStream("");
@@ -329,12 +336,67 @@ class ChatController {
     }
   }
 
+  async pushTraceToWebview(baseSessionId) {
+    if (!this.runtime.getMemorySnapshot) {
+      return;
+    }
+    const snapshot = await this.runtime.getMemorySnapshot();
+    const lastRunTrace = snapshot && snapshot.lastRunTrace ? snapshot.lastRunTrace : null;
+    if (!lastRunTrace) {
+      return;
+    }
+    const card = buildTraceCard(lastRunTrace);
+    this.postToChatView({
+      type: "traceUpdate",
+      value: card,
+      baseSessionId: baseSessionId || "",
+    });
+  }
+
   isCurrentSession(baseSessionId) {
     if (!baseSessionId || !this.getSessionLabel) {
       return true;
     }
     return this.getSessionLabel() === baseSessionId;
   }
+}
+
+function buildTraceCard(trace) {
+  if (!trace || typeof trace !== "object") {
+    return null;
+  }
+  const toolCalls = Array.isArray(trace.toolCalls) ? trace.toolCalls : [];
+  const approvals = Array.isArray(trace.approvals) ? trace.approvals : [];
+  const subagentRuns = Array.isArray(trace.subagentRuns) ? trace.subagentRuns : [];
+  const verification = trace.verification || null;
+  const changedPaths =
+    verification && Array.isArray(verification.changedPaths)
+      ? verification.changedPaths
+      : [];
+
+  return {
+    status: trace.status || "unknown",
+    startedAt: trace.startedAt || null,
+    finishedAt: trace.finishedAt || null,
+    tools: toolCalls.map((call) => ({
+      name: call.name || "tool",
+      status: call.status || (call.output && call.output.ok === false ? "failed" : "ok"),
+      path: (call.output && (call.output.path || (call.output.data && call.output.data.path))) || "",
+      message: (call.output && (call.output.message || call.output.summary)) || "",
+    })),
+    approvals: approvals.map((approval) => ({
+      action: approval.action || approval.tool || "",
+      status: approval.status || "",
+    })),
+    subagents: subagentRuns.map((run) => ({
+      name: run.agentName || run.agentKey || "Subagent",
+      task: typeof run.task === "string" ? run.task.slice(0, 80) : "",
+      toolCount: run.evidence ? (run.evidence.toolUseCount || 0) : 0,
+    })),
+    verification: verification
+      ? { status: verification.status || "not_run", changedPaths: changedPaths.slice(0, 6) }
+      : null,
+  };
 }
 
 module.exports = {

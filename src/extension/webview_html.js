@@ -527,6 +527,149 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         font-size: 12px;
         padding-left: 2px;
       }
+      .auth-strip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 10px;
+        height: 26px;
+        border-bottom: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 90%, black 10%);
+        font-size: 11px;
+        opacity: 0.82;
+      }
+      .auth-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+        background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 80%, transparent);
+      }
+      .auth-dot.is-signed-in {
+        background: #3cb371;
+      }
+      .auth-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .memory-btn {
+        width: 38px;
+        height: 36px;
+        box-sizing: border-box;
+        border-radius: 0;
+        border-left: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 78%, black 22%);
+        color: var(--vscode-editor-foreground);
+        box-shadow: none;
+        padding: 0;
+        font-size: 14px;
+        line-height: 1;
+        flex: 0 0 auto;
+        opacity: 0.72;
+      }
+      .memory-btn:hover:not(:disabled) {
+        opacity: 1;
+        transform: none;
+        box-shadow: none;
+        filter: brightness(1.08);
+      }
+      /* ── trace panel ───────────────────────────────────────── */
+      .trace-panel {
+        border-top: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 94%, black 6%);
+        font-size: 12px;
+      }
+      .trace-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 14px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: color-mix(in srgb, var(--vscode-editor-foreground) 72%, transparent);
+        box-shadow: none;
+        font-size: 12px;
+        font-weight: 500;
+        text-align: left;
+        line-height: 1.3;
+        cursor: pointer;
+      }
+      .trace-toggle:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--vscode-editor-foreground) 6%, transparent);
+        transform: none;
+        filter: none;
+        box-shadow: none;
+      }
+      .trace-toggle-arrow {
+        font-size: 10px;
+        opacity: 0.6;
+        flex: 0 0 auto;
+      }
+      .trace-toggle-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .trace-toggle-status {
+        font-size: 11px;
+        opacity: 0.68;
+        flex: 0 0 auto;
+      }
+      .trace-body {
+        display: none;
+        padding: 0 14px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .trace-body.is-hidden {
+        display: none;
+      }
+      .trace-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 2px 0;
+        line-height: 1.45;
+        opacity: 0.86;
+      }
+      .trace-row-icon {
+        flex: 0 0 14px;
+        text-align: center;
+        font-size: 11px;
+      }
+      .trace-row-name {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: 11px;
+        opacity: 0.9;
+        flex: 0 0 auto;
+      }
+      .trace-row-detail {
+        opacity: 0.55;
+        font-size: 11px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1 1 auto;
+      }
+      .trace-section-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.45;
+        padding: 5px 0 2px;
+      }
     </style>
   </head>
   <body>
@@ -537,11 +680,24 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             <span class="brand-mark-logo" aria-hidden="true"></span>
           </div>
           <div id="sessionTabs" class="session-tabs" aria-label="Mochi sessions"></div>
+          <button class="memory-btn" id="memoryBtn" type="button" title="View memory snapshot">⚡</button>
           <button class="tab-add-button" id="newSession" type="button" title="New session">+</button>
+        </div>
+        <div class="auth-strip" id="authStrip">
+          <span class="auth-dot" id="authDot"></span>
+          <span class="auth-label" id="authLabel">Not signed in</span>
         </div>
       </div>
       <div id="messages" class="messages">
         <div class="bubble assistant">Mochi is ready. Ask for code changes, explanations, or project help.</div>
+      </div>
+      <div id="tracePanel" class="trace-panel" style="display:none">
+        <button class="trace-toggle" id="traceToggle" type="button">
+          <span class="trace-toggle-arrow" id="traceArrow">▸</span>
+          <span class="trace-toggle-label" id="traceLabel">Last run</span>
+          <span class="trace-toggle-status" id="traceStatus"></span>
+        </button>
+        <div class="trace-body is-hidden" id="traceBody"></div>
       </div>
       <div class="composer">
         <div id="status" class="statusline">Ready.</div>
@@ -560,7 +716,17 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         const statusEl = document.getElementById("status");
         const sendButton = document.getElementById("send");
         const newSessionButton = document.getElementById("newSession");
+        const memoryButton = document.getElementById("memoryBtn");
         const sessionTabsEl = document.getElementById("sessionTabs");
+        const authDotEl = document.getElementById("authDot");
+        const authLabelEl = document.getElementById("authLabel");
+        const tracePanelEl = document.getElementById("tracePanel");
+        const traceToggleEl = document.getElementById("traceToggle");
+        const traceArrowEl = document.getElementById("traceArrow");
+        const traceLabelEl = document.getElementById("traceLabel");
+        const traceStatusEl = document.getElementById("traceStatus");
+        const traceBodyEl = document.getElementById("traceBody");
+        let tracePanelOpen = false;
         let pendingEl = null;
         let pendingShellEl = null;
         let activityStackEl = null;
@@ -572,6 +738,192 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         let sessions = [];
         const draftsBySession = Object.create(null);
         const approvalCards = new Map();
+
+        function updateAuthStatus(workspaceDescription) {
+          const text = String(workspaceDescription || "");
+          const firstLine = text.split("\\n")[0] || "";
+          const signedIn = firstLine.startsWith("Signed in:") && !firstLine.includes(": no");
+          const label = signedIn
+            ? firstLine.replace("Signed in:", "").trim()
+            : "Not signed in";
+          authDotEl.className = "auth-dot" + (signedIn ? " is-signed-in" : "");
+          authLabelEl.textContent = signedIn ? "Signed in: " + label : "Not signed in";
+        }
+
+        memoryButton.addEventListener("click", function () {
+          vscode.postMessage({ type: "openMemorySnapshot" });
+        });
+
+        traceToggleEl.addEventListener("click", function () {
+          tracePanelOpen = !tracePanelOpen;
+          traceArrowEl.textContent = tracePanelOpen ? "▾" : "▸";
+          traceBodyEl.classList.toggle("is-hidden", !tracePanelOpen);
+        });
+
+        function renderTrace(card) {
+          if (!card) {
+            tracePanelEl.style.display = "none";
+            return;
+          }
+          tracePanelEl.style.display = "";
+
+          const statusEmoji = card.status === "completed" ? "✓" : card.status === "failed" ? "✗" : "·";
+          const toolCount = Array.isArray(card.tools) ? card.tools.length : 0;
+          const subCount = Array.isArray(card.subagents) ? card.subagents.length : 0;
+          const approvalCount = Array.isArray(card.approvals) ? card.approvals.length : 0;
+          const parts = [];
+          if (toolCount) {
+            parts.push(toolCount + " tool" + (toolCount !== 1 ? "s" : ""));
+          }
+          if (subCount) {
+            parts.push(subCount + " agent" + (subCount !== 1 ? "s" : ""));
+          }
+          if (approvalCount) {
+            parts.push(approvalCount + " approval" + (approvalCount !== 1 ? "s" : ""));
+          }
+          traceLabelEl.textContent = "Last run" + (parts.length ? ": " + parts.join(" · ") : "");
+          traceStatusEl.textContent = statusEmoji + " " + (card.status || "");
+
+          traceBodyEl.innerHTML = "";
+
+          // tools section
+          if (toolCount) {
+            const toolLabel = document.createElement("div");
+            toolLabel.className = "trace-section-label";
+            toolLabel.textContent = "Tools";
+            traceBodyEl.appendChild(toolLabel);
+
+            for (const tool of card.tools) {
+              const row = document.createElement("div");
+              row.className = "trace-row";
+
+              const icon = document.createElement("span");
+              icon.className = "trace-row-icon";
+              icon.textContent = tool.status === "failed" ? "✗" : "✓";
+              icon.style.color = tool.status === "failed" ? "var(--vscode-errorForeground, #f14c4c)" : "#3cb371";
+
+              const name = document.createElement("span");
+              name.className = "trace-row-name";
+              name.textContent = tool.name || "tool";
+
+              const detail = document.createElement("span");
+              detail.className = "trace-row-detail";
+              detail.textContent = tool.path || tool.message || "";
+
+              row.appendChild(icon);
+              row.appendChild(name);
+              if (detail.textContent) {
+                row.appendChild(detail);
+              }
+              traceBodyEl.appendChild(row);
+            }
+          }
+
+          // subagents section
+          if (subCount) {
+            const agentLabel = document.createElement("div");
+            agentLabel.className = "trace-section-label";
+            agentLabel.textContent = "Sub-agents";
+            traceBodyEl.appendChild(agentLabel);
+
+            for (const agent of card.subagents) {
+              const row = document.createElement("div");
+              row.className = "trace-row";
+
+              const icon = document.createElement("span");
+              icon.className = "trace-row-icon";
+              icon.textContent = "⚙";
+
+              const name = document.createElement("span");
+              name.className = "trace-row-name";
+              name.textContent = agent.name || "Subagent";
+
+              const detail = document.createElement("span");
+              detail.className = "trace-row-detail";
+              detail.textContent = (agent.toolCount ? agent.toolCount + " tools · " : "") + (agent.task || "");
+
+              row.appendChild(icon);
+              row.appendChild(name);
+              row.appendChild(detail);
+              traceBodyEl.appendChild(row);
+            }
+          }
+
+          // approvals section
+          if (approvalCount) {
+            const approvalLabel = document.createElement("div");
+            approvalLabel.className = "trace-section-label";
+            approvalLabel.textContent = "Approvals";
+            traceBodyEl.appendChild(approvalLabel);
+
+            for (const approval of card.approvals) {
+              const row = document.createElement("div");
+              row.className = "trace-row";
+
+              const icon = document.createElement("span");
+              icon.className = "trace-row-icon";
+              const isApproved = approval.status === "approved";
+              icon.textContent = isApproved ? "✓" : "✗";
+              icon.style.color = isApproved
+                ? "#3cb371"
+                : "var(--vscode-errorForeground, #f14c4c)";
+
+              const name = document.createElement("span");
+              name.className = "trace-row-name";
+              name.textContent = approval.action || "action";
+
+              const detail = document.createElement("span");
+              detail.className = "trace-row-detail";
+              detail.textContent = approval.status || "";
+
+              row.appendChild(icon);
+              row.appendChild(name);
+              row.appendChild(detail);
+              traceBodyEl.appendChild(row);
+            }
+          }
+
+          // verification
+          if (card.verification) {
+            const verLabel = document.createElement("div");
+            verLabel.className = "trace-section-label";
+            verLabel.textContent = "Verification";
+            traceBodyEl.appendChild(verLabel);
+
+            const row = document.createElement("div");
+            row.className = "trace-row";
+
+            const icon = document.createElement("span");
+            icon.className = "trace-row-icon";
+            const vStatus = card.verification.status || "unknown";
+            icon.textContent = vStatus === "passed" ? "✓" : vStatus === "failed" ? "✗" : "·";
+            if (vStatus === "passed") {
+              icon.style.color = "#3cb371";
+            } else if (vStatus === "failed") {
+              icon.style.color = "var(--vscode-errorForeground, #f14c4c)";
+            }
+
+            const name = document.createElement("span");
+            name.className = "trace-row-name";
+            name.textContent = vStatus;
+
+            const changedPaths = Array.isArray(card.verification.changedPaths)
+              ? card.verification.changedPaths
+              : [];
+            if (changedPaths.length) {
+              const detail = document.createElement("span");
+              detail.className = "trace-row-detail";
+              detail.textContent = changedPaths.join(", ");
+              row.appendChild(icon);
+              row.appendChild(name);
+              row.appendChild(detail);
+            } else {
+              row.appendChild(icon);
+              row.appendChild(name);
+            }
+            traceBodyEl.appendChild(row);
+          }
+        }
 
         function scrollToBottom() {
           messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1300,6 +1652,12 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           }
 
           if (message.type === "workspace") {
+            updateAuthStatus(message.value || "");
+            return;
+          }
+
+          if (message.type === "traceUpdate") {
+            renderTrace(message.value || null);
             return;
           }
 

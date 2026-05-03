@@ -111,7 +111,12 @@ const READ_ONLY_TOOL_NAMES = new Set([
   "get_workspace_root",
   "list_files",
   "read_file",
+  "search_in_files",
   "get_editor_context",
+  "git_status",
+  "git_diff",
+  "git_log",
+  "git_blame",
 ]);
 
 const REVIEW_TOOL_NAMES = new Set([
