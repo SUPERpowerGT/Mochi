@@ -26,6 +26,8 @@ const {
 const execFileAsync = promisify(execFile);
 
 const CHAT_VIEW_ID = "localAgent.chatView";
+const AUTH_SESSION_STORAGE_KEY = "localAgent.authSession";
+const AUTH_TOKEN_SECRET_KEY = "localAgent.authToken";
 
 let chatView = null;
 let lastReply = "";
@@ -42,7 +44,8 @@ const pendingApprovalResolvers = new Map();
 let chatController = null;
 
 async function activate(context) {
-  activeAuthSession = loadStoredAuthSession(context);
+  activeAuthSession = await loadStoredAuthSession(context);
+  activeAuthSession = await validateStoredAuthSession(context, activeAuthSession);
   activeIdentity = loadActiveIdentity(context);
   if (activeAuthSession && activeAuthSession.user) {
     activeIdentity = deriveIdentityFromAuthUser(activeAuthSession.user, activeIdentity);
@@ -102,6 +105,7 @@ async function activate(context) {
     vscode,
     runtime,
     getWorkspaceDescription: describeWorkspaceTarget,
+    getAuthState: getAuthViewState,
     getEditorContext,
     openChatView,
     postToChatView,
@@ -151,6 +155,15 @@ async function activate(context) {
       modelConfig = nextConfig;
       return true;
     },
+    handleAuthSubmit: async (payload) => {
+      await handleWebviewAuthSubmit(context, runtime, payload);
+    },
+    handleLoadCheckpoints: async () => {
+      await handleWebviewLoadCheckpoints(runtime);
+    },
+    handleRestoreCheckpointById: async (checkpointId) => {
+      await handleWebviewRestoreCheckpoint(context, runtime, checkpointId);
+    },
   });
 
   context.subscriptions.push(
@@ -170,6 +183,9 @@ async function activate(context) {
 
         setTimeout(() => {
           chatController.flushPendingUiState().catch((error) => {
+            vscode.window.showErrorMessage(error.message || String(error));
+          });
+          publishExtensionContext().catch((error) => {
             vscode.window.showErrorMessage(error.message || String(error));
           });
         }, 50);
@@ -248,10 +264,7 @@ async function activate(context) {
       targetWorkspaceFolder = picked[0].fsPath;
       await ensureAutoCommitAnalysisSetup();
       vscode.window.showInformationMessage(`Local Agent workspace set to: ${targetWorkspaceFolder}`);
-      postToChatView({
-        type: "workspace",
-        value: describeWorkspaceTarget(),
-      });
+      await publishExtensionContext();
     }),
     vscode.commands.registerCommand("localAgent.sendSelection", async () => {
       await chatController.handleSendSelection();
@@ -378,6 +391,7 @@ async function activate(context) {
     })
   );
 
+  await updateExtensionContextKeys();
   ensureAutoCommitAnalysisSetup().catch(() => {
     // Auto hook installation is best-effort and should not block activation.
   });
@@ -471,6 +485,18 @@ function postToChatView(message) {
   return true;
 }
 
+async function publishExtensionContext() {
+  postToChatView({
+    type: "workspace",
+    value: describeWorkspaceTarget(),
+  });
+  postToChatView({
+    type: "authState",
+    value: getAuthViewState(),
+  });
+  await updateExtensionContextKeys();
+}
+
 function getTargetWorkspaceFolder() {
   if (targetWorkspaceFolder) {
     return targetWorkspaceFolder;
@@ -490,6 +516,29 @@ function describeWorkspaceTarget() {
   }
 
   return `${authLabel}\n${identityLabel}\nWorkspace: none selected. Open a folder or run 'Local Agent: Select Workspace Folder'.`;
+}
+
+function getAuthViewState() {
+  const user = activeAuthSession && activeAuthSession.user ? activeAuthSession.user : null;
+  const session = activeAuthSession && activeAuthSession.session ? activeAuthSession.session : null;
+  const workspaceRoot = getTargetWorkspaceFolder();
+  return {
+    isSignedIn: Boolean(getActiveAuthToken() && user),
+    email: user && user.email ? user.email : "",
+    displayName: user && user.displayName ? user.displayName : "",
+    userId: user && user.userId ? user.userId : "",
+    tenantId: user && user.tenantId ? user.tenantId : "",
+    deviceId: activeIdentity.deviceId || "",
+    deviceName: activeIdentity.deviceName || "",
+    workspaceRoot,
+    workspaceSelected: Boolean(workspaceRoot),
+    sessionExpiresAt: session && session.expiresAt ? session.expiresAt : "",
+  };
+}
+
+async function updateExtensionContextKeys() {
+  await vscode.commands.executeCommand("setContext", "localAgent.isSignedIn", Boolean(getActiveAuthToken()));
+  await vscode.commands.executeCommand("setContext", "localAgent.hasWorkspace", Boolean(getTargetWorkspaceFolder()));
 }
 
 function getEditorContext() {
@@ -867,16 +916,84 @@ function loadActiveIdentity(context) {
   return normalizeIdentity(context.globalState.get("localAgent.activeIdentity", DEFAULT_IDENTITY));
 }
 
-function loadStoredAuthSession(context) {
-  const stored = context.globalState.get("localAgent.authSession", null);
+async function loadStoredAuthSession(context) {
+  const stored = context.globalState.get(AUTH_SESSION_STORAGE_KEY, null);
   if (!stored || typeof stored !== "object") {
     return null;
   }
-  return stored;
+  const savedToken = await context.secrets.get(AUTH_TOKEN_SECRET_KEY);
+  const migratedToken = savedToken || (stored.token ? String(stored.token) : "");
+  const sanitized = {
+    user: stored.user || null,
+    session: stored.session || null,
+    token: migratedToken,
+  };
+
+  if (!savedToken && migratedToken) {
+    await context.secrets.store(AUTH_TOKEN_SECRET_KEY, migratedToken);
+  }
+  if (Object.prototype.hasOwnProperty.call(stored, "token")) {
+    await context.globalState.update(AUTH_SESSION_STORAGE_KEY, {
+      user: stored.user || null,
+      session: stored.session || null,
+    });
+  }
+
+  return migratedToken || sanitized.user || sanitized.session ? sanitized : null;
 }
 
 async function storeAuthSession(context, authSession) {
-  await context.globalState.update("localAgent.authSession", authSession || null);
+  if (!authSession) {
+    await context.secrets.delete(AUTH_TOKEN_SECRET_KEY);
+    await context.globalState.update(AUTH_SESSION_STORAGE_KEY, null);
+    return;
+  }
+
+  const token = authSession.token ? String(authSession.token) : "";
+  if (token) {
+    await context.secrets.store(AUTH_TOKEN_SECRET_KEY, token);
+  } else {
+    await context.secrets.delete(AUTH_TOKEN_SECRET_KEY);
+  }
+
+  await context.globalState.update(AUTH_SESSION_STORAGE_KEY, {
+    user: authSession.user || null,
+    session: authSession.session || null,
+  });
+}
+
+async function validateStoredAuthSession(context, authSession) {
+  if (!authSession || !authSession.token) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${getIdentityApiBaseUrl()}/api/v1/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${authSession.token}`,
+      },
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      await storeAuthSession(context, null);
+      return null;
+    }
+
+    if (!response.ok) {
+      return authSession;
+    }
+
+    const payload = await response.json().catch(() => null);
+    const validated = {
+      token: authSession.token,
+      user: payload && payload.user ? payload.user : authSession.user,
+      session: payload && payload.session ? payload.session : authSession.session,
+    };
+    await storeAuthSession(context, validated);
+    return validated;
+  } catch (error) {
+    return authSession;
+  }
 }
 
 function getActiveAuthToken() {
@@ -1056,7 +1173,7 @@ async function applyIdentitySwitch(context, runtime) {
   pendingApprovals = [];
   pendingActivities = [];
   pendingReplyStream = "";
-  postToChatView({ type: "workspace", value: describeWorkspaceTarget() });
+  await publishExtensionContext();
   await syncChatSessionUi(runtime, activeBaseSessionId);
 }
 
@@ -1248,13 +1365,18 @@ async function signInToMochi(context, runtime) {
     return;
   }
 
-  const authSession = await requestMochiAuth("/api/v1/auth/login", {
-    email,
-    password,
-    deviceName,
-  });
-  await applyMochiAuthSession(context, runtime, authSession);
-  vscode.window.showInformationMessage(`Signed in to Mochi as ${authSession.user.displayName}.`);
+  try {
+    const authSession = await requestMochiAuth("/api/v1/auth/login", {
+      email,
+      password,
+      deviceName,
+    });
+    await applyMochiAuthSession(context, runtime, authSession);
+    const userLabel = (authSession && authSession.user && (authSession.user.displayName || authSession.user.email)) || email;
+    vscode.window.showInformationMessage(`Signed in to Mochi as ${userLabel}.`);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Mochi sign in failed: ${error && error.message ? error.message : String(error)}`);
+  }
 }
 
 async function registerForMochi(context, runtime) {
@@ -1294,14 +1416,19 @@ async function registerForMochi(context, runtime) {
     return;
   }
 
-  const authSession = await requestMochiAuth("/api/v1/auth/register", {
-    displayName,
-    email,
-    password,
-    deviceName,
-  });
-  await applyMochiAuthSession(context, runtime, authSession);
-  vscode.window.showInformationMessage(`Registered and signed in to Mochi as ${authSession.user.displayName}.`);
+  try {
+    const authSession = await requestMochiAuth("/api/v1/auth/register", {
+      displayName,
+      email,
+      password,
+      deviceName,
+    });
+    await applyMochiAuthSession(context, runtime, authSession);
+    const userLabel = (authSession && authSession.user && (authSession.user.displayName || authSession.user.email)) || email;
+    vscode.window.showInformationMessage(`Registered and signed in to Mochi as ${userLabel}.`);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Mochi registration failed: ${error && error.message ? error.message : String(error)}`);
+  }
 }
 
 async function signOutFromMochi(context, runtime) {
@@ -1355,6 +1482,140 @@ async function applyMochiAuthSession(context, runtime, authPayload) {
   activeIdentity = deriveIdentityFromAuthUser(activeAuthSession && activeAuthSession.user ? activeAuthSession.user : null, activeIdentity);
   await applyIdentitySwitch(context, runtime);
   await ensureAutoCommitAnalysisSetup();
+}
+
+async function handleWebviewAuthSubmit(context, runtime, payload) {
+  const mode = payload && payload.mode === "register" ? "register" : "signin";
+  const email = String((payload && payload.email) || "").trim();
+  const password = String((payload && payload.password) || "");
+  const deviceName = String((payload && payload.deviceName) || "").trim() || activeIdentity.deviceName || "This Machine";
+  const displayName = String((payload && payload.displayName) || "").trim();
+
+  if (!email || !password || (mode === "register" && !displayName)) {
+    postToChatView({
+      type: "authResult",
+      value: { ok: false, error: "Please fill in all required fields." },
+    });
+    return;
+  }
+
+  try {
+    const body = mode === "register"
+      ? { displayName, email, password, deviceName }
+      : { email, password, deviceName };
+    const pathname = mode === "register" ? "/api/v1/auth/register" : "/api/v1/auth/login";
+    const authSession = await requestMochiAuth(pathname, body);
+    await applyMochiAuthSession(context, runtime, authSession);
+    const userLabel = (authSession && authSession.user && (authSession.user.displayName || authSession.user.email)) || email;
+    postToChatView({
+      type: "authResult",
+      value: {
+        ok: true,
+        message: mode === "register"
+          ? `Registered and signed in as ${userLabel}.`
+          : `Signed in as ${userLabel}.`,
+      },
+    });
+    vscode.window.showInformationMessage(
+      mode === "register"
+        ? `Registered and signed in to Mochi as ${userLabel}.`
+        : `Signed in to Mochi as ${userLabel}.`
+    );
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error || "Authentication failed.");
+    postToChatView({
+      type: "authResult",
+      value: { ok: false, error: message },
+    });
+  }
+}
+
+async function handleWebviewLoadCheckpoints(runtime) {
+  if (!getActiveAuthToken()) {
+    postToChatView({
+      type: "checkpointTree",
+      value: [],
+    });
+    return;
+  }
+
+  try {
+    const tree = runtime.listRestoreTree
+      ? await runtime.listRestoreTree({ limit: 200 })
+      : [];
+    postToChatView({
+      type: "checkpointTree",
+      value: Array.isArray(tree) ? tree : [],
+    });
+  } catch (error) {
+    postToChatView({
+      type: "checkpointTree",
+      value: [],
+    });
+    vscode.window.showErrorMessage(error && error.message ? error.message : String(error));
+  }
+}
+
+async function handleWebviewRestoreCheckpoint(context, runtime, checkpointId) {
+  if (!checkpointId) {
+    postToChatView({
+      type: "checkpointRestoreResult",
+      value: { ok: false, error: "Missing checkpoint id." },
+    });
+    return;
+  }
+  if (!getActiveAuthToken()) {
+    postToChatView({
+      type: "checkpointRestoreResult",
+      value: { ok: false, error: "Sign in to Mochi before restoring checkpoints." },
+    });
+    return;
+  }
+  if (!runtime.restoreCheckpoint) {
+    postToChatView({
+      type: "checkpointRestoreResult",
+      value: { ok: false, error: "Checkpoint restore is not available in this runtime build." },
+    });
+    return;
+  }
+
+  try {
+    const restored = await runtime.restoreCheckpoint(checkpointId);
+    if (!restored || !restored.baseSessionId) {
+      postToChatView({
+        type: "checkpointRestoreResult",
+        value: { ok: false, error: "Checkpoint not found or could not be restored." },
+      });
+      return;
+    }
+
+    activeBaseSessionId = restored.baseSessionId;
+    await storeBaseSessionId(context, activeIdentity, activeBaseSessionId);
+    runtime.setBaseSessionId(activeBaseSessionId);
+    await runtime.ensureCurrentSession();
+    lastReply = "";
+    pendingPrefill = "";
+    pendingReplies = [];
+    pendingApprovals = [];
+    pendingActivities = [];
+    pendingReplyStream = "";
+    await syncChatSessionUi(runtime, activeBaseSessionId);
+
+    const title = restored.checkpoint && restored.checkpoint.title
+      ? restored.checkpoint.title
+      : "Checkpoint";
+    postToChatView({
+      type: "checkpointRestoreResult",
+      value: { ok: true, message: `Restored: ${title}` },
+    });
+    vscode.window.showInformationMessage(`Restored checkpoint: ${title}`);
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error || "Restore failed.");
+    postToChatView({
+      type: "checkpointRestoreResult",
+      value: { ok: false, error: message },
+    });
+  }
 }
 
 function formatCheckpointTime(value) {

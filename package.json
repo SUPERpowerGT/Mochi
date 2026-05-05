@@ -255,6 +255,35 @@
           "description": "OpenAI API format Mochi should use."
         }
       }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "localAgent.signIn",
+          "when": "view == localAgent.chatView && !localAgent.isSignedIn",
+          "group": "navigation@1"
+        },
+        {
+          "command": "localAgent.register",
+          "when": "view == localAgent.chatView && !localAgent.isSignedIn",
+          "group": "navigation@2"
+        },
+        {
+          "command": "localAgent.signOut",
+          "when": "view == localAgent.chatView && localAgent.isSignedIn",
+          "group": "navigation@3"
+        },
+        {
+          "command": "localAgent.restoreCheckpoint",
+          "when": "view == localAgent.chatView && localAgent.isSignedIn",
+          "group": "navigation@4"
+        },
+        {
+          "command": "localAgent.selectWorkspaceFolder",
+          "when": "view == localAgent.chatView",
+          "group": "navigation@5"
+        }
+      ]
     }
   }
 }

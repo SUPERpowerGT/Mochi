@@ -551,6 +551,31 @@ async function createCheckpoint({
 async function createCheckpointFromSnapshot(snapshot) {
   const taskTitle = snapshot.task && snapshot.task.title ? snapshot.task.title : "Checkpoint";
   const summary = String(snapshot.sessionSummary || snapshot.lastPrompt || "Synced session summary.").slice(0, 1200);
+  const title = `${taskTitle} @ ${snapshot.workspaceLabel}`;
+
+  // Dedup: if the most recent checkpoint for this (user, baseSessionId, deviceId)
+  // has the same title and summary, skip creating a new row and return the existing one.
+  try {
+    const existing = await pool.query(
+      `SELECT id AS "checkpointId", tenant_id AS "tenantId", user_id AS "userId",
+              device_id AS "deviceId", workspace_key AS "workspaceKey",
+              workspace_label AS "workspaceLabel", base_session_id AS "baseSessionId",
+              title, summary, kind, payload, created_at AS "createdAt"
+       FROM checkpoints
+       WHERE user_id = $1 AND base_session_id = $2
+         AND ($3::text IS NULL OR device_id = $3)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [snapshot.userId, snapshot.baseSessionId, snapshot.deviceId || null]
+    );
+    const last = existing.rows[0];
+    if (last && last.title === title && (last.summary || "") === summary) {
+      return last;
+    }
+  } catch (error) {
+    // fall through to insert on lookup failure
+  }
+
   return createCheckpoint({
     tenantId: snapshot.tenantId,
     userId: snapshot.userId,
@@ -558,7 +583,7 @@ async function createCheckpointFromSnapshot(snapshot) {
     workspaceKey: snapshot.workspaceKey,
     workspaceLabel: snapshot.workspaceLabel,
     baseSessionId: snapshot.baseSessionId,
-    title: `${taskTitle} @ ${snapshot.workspaceLabel}`,
+    title,
     summary,
     kind: "session-sync",
     payload: snapshot,
@@ -822,8 +847,95 @@ async function listRestoreCandidates({ tenantId = "", userId = "", workspaceKey 
   return result.rows;
 }
 
-async function getRestoreCheckpoint({ checkpointId, tenantId = "", userId = "", workspaceKey = "" } = {}) {
-  const values = [checkpointId];
+async function listRestoreTree({ tenantId = "", userId = "", limit = 200 } = {}) {
+  const rows = await listRestoreCandidates({
+    tenantId,
+    userId,
+    limit,
+  });
+  // Group: workspace -> session -> device -> [checkpoints sorted by createdAt asc]
+  const workspaces = new Map();
+  for (const row of rows) {
+    const wsKey = row.workspaceKey || "(no-workspace)";
+    if (!workspaces.has(wsKey)) {
+      workspaces.set(wsKey, {
+        workspaceKey: wsKey,
+        workspaceLabel: row.workspaceLabel || wsKey,
+        sessions: new Map(),
+        latestAt: row.createdAt,
+      });
+    }
+    const ws = workspaces.get(wsKey);
+    if (String(row.createdAt) > String(ws.latestAt)) ws.latestAt = row.createdAt;
+
+    const sKey = row.baseSessionId || "default";
+    if (!ws.sessions.has(sKey)) {
+      ws.sessions.set(sKey, {
+        baseSessionId: sKey,
+        title: extractSessionTitle(row),
+        devices: new Map(),
+        latestAt: row.createdAt,
+        earliestAt: row.createdAt,
+        checkpointCount: 0,
+      });
+    }
+    const session = ws.sessions.get(sKey);
+    if (String(row.createdAt) > String(session.latestAt)) {
+      session.latestAt = row.createdAt;
+    }
+    // Use the EARLIEST checkpoint's title as the stable session label
+    if (String(row.createdAt) <= String(session.earliestAt)) {
+      session.earliestAt = row.createdAt;
+      session.title = extractSessionTitle(row) || session.title;
+    }
+    session.checkpointCount += 1;
+
+    const dKey = row.deviceId || row.deviceName || "(unknown-device)";
+    if (!session.devices.has(dKey)) {
+      session.devices.set(dKey, {
+        deviceId: row.deviceId || "",
+        deviceName: row.deviceName || row.deviceId || "Unknown device",
+        checkpoints: [],
+      });
+    }
+    session.devices.get(dKey).checkpoints.push({
+      checkpointId: row.checkpointId,
+      title: row.title || "Checkpoint",
+      summary: row.summary || "",
+      createdAt: row.createdAt,
+      kind: row.kind || "session-sync",
+    });
+  }
+
+  const tree = Array.from(workspaces.values()).map((ws) => ({
+    workspaceKey: ws.workspaceKey,
+    workspaceLabel: ws.workspaceLabel,
+    latestAt: ws.latestAt,
+    sessions: Array.from(ws.sessions.values())
+      .map((session) => ({
+        baseSessionId: session.baseSessionId,
+        title: session.title,
+        latestAt: session.latestAt,
+        checkpointCount: session.checkpointCount,
+        devices: Array.from(session.devices.values()).map((dev) => ({
+          deviceId: dev.deviceId,
+          deviceName: dev.deviceName,
+          checkpoints: dev.checkpoints.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))),
+        })).sort((a, b) => a.deviceName.localeCompare(b.deviceName)),
+      }))
+      .sort((a, b) => String(b.latestAt).localeCompare(String(a.latestAt))),
+  })).sort((a, b) => String(b.latestAt).localeCompare(String(a.latestAt)));
+
+  return tree;
+}
+
+function extractSessionTitle(row) {
+  // Prefer task title from payload.summary first sentence, else strip "@ workspace" suffix from row.title
+  const raw = String(row.title || "Session").replace(/\s*@\s*[^@]+$/, "").trim();
+  return raw || "Session";
+}
+
+async function getRestoreCheckpoint({ checkpointId, tenantId = "", userId = "", workspaceKey = "" } = {}) {  const values = [checkpointId];
   const conditions = [`checkpoints.id = $1`];
 
   if (tenantId) {
@@ -1428,6 +1540,25 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         ok: true,
         checkpoints,
+      });
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/api/v1/restore/tree") {
+      const auth = await getAuthenticatedContext(request);
+      if (!auth) {
+        sendUnauthorized(response);
+        return;
+      }
+
+      const tree = await listRestoreTree({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        limit: requestUrl.searchParams.get("limit") || 200,
+      });
+      sendJson(response, 200, {
+        ok: true,
+        tree,
       });
       return;
     }

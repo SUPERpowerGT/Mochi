@@ -101,6 +101,30 @@ class SessionSyncClient {
     return payload && payload.checkpoint ? payload.checkpoint : null;
   }
 
+  async fetchRestoreTree(query = {}) {
+    if (!this.enabled || !this.authToken) {
+      return [];
+    }
+
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== "") {
+        params.set(key, String(value));
+      }
+    }
+
+    const url = `${this.baseUrl}/api/v1/restore/tree${params.toString() ? `?${params.toString()}` : ""}`;
+    const response = await fetch(url, {
+      headers: this.buildHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`Restore tree fetch failed with status ${response.status}`);
+    }
+
+    const payload = await response.json();
+    return payload && Array.isArray(payload.tree) ? payload.tree : [];
+  }
+
   async uploadChangeSummary(entry) {
     if (!this.enabled || !entry || !this.authToken) {
       return null;

@@ -406,6 +406,56 @@ function renderDashboardHtml() {
       color: var(--muted);
     }
 
+    .ck-tree { display: grid; gap: 10px; }
+    .ck-workspace {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 253, 248, 0.86);
+      overflow: hidden;
+    }
+    .ck-workspace-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; cursor: pointer; font-weight: 600; user-select: none;
+      background: rgba(0,0,0,0.03);
+    }
+    .ck-caret { display:inline-block; width:12px; opacity:.7; transition: transform 120ms ease; }
+    .ck-workspace.is-open > .ck-workspace-header > .ck-caret { transform: rotate(90deg); }
+    .ck-session.is-open > .ck-session-header > .ck-caret { transform: rotate(90deg); }
+    .ck-meta-right { margin-left:auto; font-size:12px; color: var(--muted); font-weight: 400; }
+    .ck-sessions { display:none; padding: 6px 14px 12px 28px; }
+    .ck-workspace.is-open > .ck-sessions { display: block; }
+    .ck-session {
+      margin-top: 6px;
+      border-left: 2px solid rgba(0,0,0,0.12);
+      padding-left: 10px;
+    }
+    .ck-session-header {
+      display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;
+      border-radius: 6px; user-select: none;
+    }
+    .ck-session-header:hover { background: rgba(0,0,0,0.04); }
+    .ck-session-title { font-weight: 600; }
+    .ck-devices { display:none; padding: 4px 0 6px 16px; }
+    .ck-session.is-open > .ck-devices { display: block; }
+    .ck-device { margin-top: 8px; }
+    .ck-device-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .ck-checkpoint-line {
+      position: relative;
+      padding: 6px 10px 6px 18px;
+      margin-left: 4px;
+      border-left: 1px dashed rgba(0,0,0,0.18);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .ck-checkpoint-line::before {
+      content: ""; position: absolute; left: -5px; top: 11px;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--accent, #6c63ff);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.86);
+    }
+    .ck-checkpoint-line.is-latest::before { background: #2f7d4d; }
+    .ck-cp-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -557,23 +607,17 @@ function renderDashboardHtml() {
           </div>
         </form>
 
-        <div class="filters" style="padding: 0;">
-          <label>
-            User
-            <select id="userFilter"></select>
-          </label>
-          <label>
-            Device
-            <select id="deviceFilter"></select>
-          </label>
+        <div class="filters" id="filtersRow" style="padding: 0;">
           <label>
             Workspace
             <select id="workspaceFilter"></select>
           </label>
           <label>
             Action
-            <button id="refreshButton" type="button">Refresh Dashboard</button>
+            <button id="refreshButton" type="button">Refresh</button>
           </label>
+          <select id="userFilter" style="display:none;"></select>
+          <select id="deviceFilter" style="display:none;"></select>
         </div>
       </div>
     </section>
@@ -581,108 +625,78 @@ function renderDashboardHtml() {
     <section class="kpis" id="kpis"></section>
 
     <nav class="dashboard-nav" aria-label="Dashboard sections">
-      <button type="button" class="nav-pill active" data-pane="overview">Overview</button>
-      <button type="button" class="nav-pill" data-pane="continuity">Continuity</button>
-      <button type="button" class="nav-pill" data-pane="audit">Audit Trail</button>
-      <button type="button" class="nav-pill" data-pane="account">Account</button>
-      <div class="nav-summary" id="navSummary">Overview of the current Mochi control plane state.</div>
+      <button type="button" class="nav-pill active" data-pane="checkpoints">My Checkpoints</button>
+      <button type="button" class="nav-pill" data-pane="diagnostics">Diagnostics</button>
+      <div class="nav-summary" id="navSummary">Your synced sessions, ready to restore on any device.</div>
     </nav>
 
     <section class="content-stage">
-      <div class="content-pane active" id="pane-overview">
+      <div class="content-pane active" id="pane-checkpoints">
+        <section class="grid">
+          <article class="panel full section">
+            <h2>Your Checkpoints</h2>
+            <p>Auto-saved after every completed Mochi run. Sign in from the VS Code extension on any machine and use Restore to pick one of these.</p>
+            <div id="checkpointList"></div>
+          </article>
+
+          <article class="panel narrow section" id="signedInOnlyAccountPanel">
+            <h2>Account</h2>
+            <div id="currentUserPanel"></div>
+          </article>
+
+          <article class="panel narrow section" id="signedInOnlyHelpPanel">
+            <h2>How restore works</h2>
+            <div class="meta-list">
+              <div class="meta-item">
+                <div class="meta-label">1. Use Mochi normally</div>
+                <div class="muted">When signed in, every completed run uploads a checkpoint here automatically.</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">2. Switch device</div>
+                <div class="muted">Sign in to the same account from another machine (or with a different device name).</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">3. Restore in the panel</div>
+                <div class="muted">Click Restore in the chat panel and pick a card &mdash; chat history, summary, and task are hydrated locally.</div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <div class="content-pane" id="pane-diagnostics">
         <section class="grid">
           <article class="panel wide section">
-            <h2>Recent Continuity Snapshots</h2>
-            <p>Latest summary snapshots uploaded by users and devices. This is the core proof that device A can hand off to device B.</p>
+            <h2>Recent Snapshots</h2>
+            <p>Latest summary snapshots uploaded by users and devices.</p>
             <div id="snapshotTable"></div>
           </article>
 
           <article class="panel narrow section">
             <h2>Sync Health</h2>
-            <p>A small health summary so you can tell whether the service is updating recently or drifting stale.</p>
             <div id="healthSummary"></div>
-          </article>
-
-          <article class="panel wide section">
-            <h2>Recent Events</h2>
-            <p>Last upload events distilled from the latest snapshots for quick inspection during demos.</p>
-            <div id="eventTable"></div>
           </article>
 
           <article class="panel narrow section">
             <h2>Devices</h2>
-            <p>Current devices seen by the service, along with the most recent workspace and sync time.</p>
             <div id="deviceTable"></div>
           </article>
-        </section>
-      </div>
 
-      <div class="content-pane" id="pane-continuity">
-        <section class="grid">
           <article class="panel wide section">
-            <h2>Automatic Cloud Checkpoints</h2>
-            <p>Checkpoints are created automatically by the Mochi extension after each completed run. This page is for inspection and restore visibility, not manual cloud snapshot creation.</p>
-            <div class="meta-list">
-              <div class="meta-item">
-                <div class="meta-label">How this works</div>
-                <div class="muted">When the signed-in plugin finishes a run, it uploads a session snapshot. The server then creates a session-sync checkpoint automatically for that user, workspace, and base session.</div>
-              </div>
-              <div class="meta-item">
-                <div class="meta-label">What you should do locally</div>
-                <div class="muted">Sign in from the Mochi extension, select a workspace, and use chat normally. Checkpoints will appear here without any dashboard-side save action.</div>
-              </div>
-            </div>
+            <h2>Recent Events</h2>
+            <div id="eventTable"></div>
           </article>
 
-          <article class="panel narrow section">
-            <h2>Current User</h2>
-            <p>Authentication state for the dashboard. Register or log in to unlock private checkpoint history.</p>
-            <div id="currentUserPanel"></div>
-          </article>
-
-          <article class="panel full section">
-            <h2>Recent Checkpoints</h2>
-            <p>Checkpoint history is private to the logged-in user and updates dynamically after login or new sync activity.</p>
-            <div id="checkpointList"></div>
-          </article>
-        </section>
-      </div>
-
-      <div class="content-pane" id="pane-audit">
-        <section class="grid">
           <article class="panel wide section">
             <h2>Recent Changes</h2>
-            <p>Every meaningful run-level code change is summarized and stored so you can review what changed across devices.</p>
+            <p>Run-level code change summaries.</p>
             <div id="changeSummaryList"></div>
           </article>
 
           <article class="panel narrow section">
             <h2>Security Reports</h2>
-            <p>Latest local commit vulnerability analyses uploaded from the VS Code extension.</p>
+            <p>Latest commit vulnerability analyses.</p>
             <div id="securityReportList"></div>
-          </article>
-        </section>
-      </div>
-
-      <div class="content-pane" id="pane-account">
-        <section class="grid">
-          <article class="panel full section">
-            <h2>Workspace Controls</h2>
-            <p>Use the auth card and filters above to switch users, devices, and workspaces. This section keeps operational controls separate from the live telemetry.</p>
-            <div class="meta-list">
-              <div class="meta-item">
-                <div class="meta-label">Signed-in identity</div>
-                <div id="accountIdentitySummary">Sign in to bind private checkpoint history and device state.</div>
-              </div>
-              <div class="meta-item">
-                <div class="meta-label">Current filter scope</div>
-                <div id="accountFilterSummary">All users, all devices, all workspaces.</div>
-              </div>
-              <div class="meta-item">
-                <div class="meta-label">What this view is for</div>
-                <div class="muted">A quieter control surface for demo prep, auth switching, and confirming which user/device/workspace the dashboard is scoped to before reviewing continuity or audit data.</div>
-              </div>
-            </div>
           </article>
         </section>
       </div>
@@ -712,16 +726,14 @@ function renderDashboardHtml() {
     const messageBanner = document.getElementById('messageBanner');
     const changeSummaryList = document.getElementById('changeSummaryList');
     const securityReportList = document.getElementById('securityReportList');
-    const accountIdentitySummary = document.getElementById('accountIdentitySummary');
-    const accountFilterSummary = document.getElementById('accountFilterSummary');
+    const accountIdentitySummary = null;
+    const accountFilterSummary = null;
     const navSummary = document.getElementById('navSummary');
     const navPills = Array.from(document.querySelectorAll('.nav-pill'));
 
     const paneDescriptions = {
-      overview: 'Overview of the current Mochi control plane state.',
-      continuity: 'Checkpoint and restore records for cross-device continuity.',
-      audit: 'Change summaries and commit security reports in one place.',
-      account: 'Current identity, scope, and dashboard operating context.'
+      checkpoints: 'Your synced sessions, ready to restore on any device.',
+      diagnostics: 'Sync health, recent activity, and security reports.'
     };
 
     function authHeaders() {
@@ -797,7 +809,6 @@ function renderDashboardHtml() {
       if (!state.authUser) {
         authState.innerHTML = '<strong>Signed out.</strong><div class="muted" style="margin-top:6px;">Use the demo account alice@mochi.local with password mochi123, or register a new account.</div>';
         currentUserPanel.innerHTML = '<div class="empty">Log in to see your device-bound checkpoint history.</div>';
-        accountIdentitySummary.textContent = 'No active dashboard session. Public telemetry remains visible, but checkpoint operations stay locked.';
         return;
       }
 
@@ -818,21 +829,14 @@ function renderDashboardHtml() {
       if (deleteAccountButton) {
         deleteAccountButton.addEventListener('click', handleDeleteAccount);
       }
-
-      accountIdentitySummary.textContent = state.authUser.displayName + ' · ' + (state.authUser.email || state.authUser.userId) + ' · ' + (state.authUser.deviceName || 'Unknown device');
     }
 
     function renderScopeSummary() {
-      const parts = [
-        userFilter.value ? ('User: ' + userFilter.options[userFilter.selectedIndex].text) : 'All users',
-        deviceFilter.value ? ('Device: ' + deviceFilter.options[deviceFilter.selectedIndex].text) : 'All devices',
-        workspaceFilter.value ? ('Workspace: ' + workspaceFilter.options[workspaceFilter.selectedIndex].text) : 'All workspaces'
-      ];
-      accountFilterSummary.textContent = parts.join(' · ');
+      // No-op: filters are hidden when scope is the signed-in user.
     }
 
     function setActivePane(pane) {
-      const activePane = paneDescriptions[pane] ? pane : 'overview';
+      const activePane = paneDescriptions[pane] ? pane : 'checkpoints';
       document.querySelectorAll('.content-pane').forEach((node) => {
         node.classList.toggle('active', node.id === 'pane-' + activePane);
       });
@@ -862,6 +866,93 @@ function renderDashboardHtml() {
           + '<div class="muted">' + escapeHtml(detail) + '</div>'
           + '</div>';
       }).join('');
+    }
+
+    function renderCheckpointTree(tree) {
+      if (!state.authUser) {
+        checkpointList.innerHTML = '<div class="empty">Checkpoints are private. Log in to load them.</div>';
+        return;
+      }
+      if (!Array.isArray(tree) || !tree.length) {
+        checkpointList.innerHTML = '<div class="empty">No checkpoints yet. Finish a signed-in plugin run and a cloud checkpoint will appear here automatically.</div>';
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'ck-tree';
+
+      tree.forEach((workspace, wsIdx) => {
+        const wsEl = document.createElement('div');
+        wsEl.className = 'ck-workspace' + (wsIdx === 0 ? ' is-open' : '');
+
+        const wsHeader = document.createElement('div');
+        wsHeader.className = 'ck-workspace-header';
+        wsHeader.innerHTML =
+          '<span class="ck-caret">\u25B6</span>'
+          + '<span>' + escapeHtml(workspace.workspaceLabel || workspace.workspaceKey || 'Workspace') + '</span>'
+          + '<span class="ck-meta-right">' + (workspace.sessions || []).length + ' session(s)</span>';
+        wsHeader.addEventListener('click', () => wsEl.classList.toggle('is-open'));
+        wsEl.appendChild(wsHeader);
+
+        const sessionsBox = document.createElement('div');
+        sessionsBox.className = 'ck-sessions';
+
+        (workspace.sessions || []).forEach((session, sIdx) => {
+          const sEl = document.createElement('div');
+          sEl.className = 'ck-session' + (wsIdx === 0 && sIdx === 0 ? ' is-open' : '');
+
+          const sHeader = document.createElement('div');
+          sHeader.className = 'ck-session-header';
+          sHeader.innerHTML =
+            '<span class="ck-caret">\u25B6</span>'
+            + '<span class="ck-session-title">' + escapeHtml(session.title || session.baseSessionId || 'Session') + '</span>'
+            + '<span class="ck-meta-right">' + session.checkpointCount + ' checkpoint(s) \u00b7 ' + (session.devices || []).length + ' device(s)</span>';
+          sHeader.addEventListener('click', () => sEl.classList.toggle('is-open'));
+          sEl.appendChild(sHeader);
+
+          const devicesBox = document.createElement('div');
+          devicesBox.className = 'ck-devices';
+
+          let latestId = '';
+          let latestAt = '';
+          (session.devices || []).forEach((dev) => {
+            (dev.checkpoints || []).forEach((cp) => {
+              if (String(cp.createdAt) > String(latestAt)) {
+                latestAt = cp.createdAt;
+                latestId = cp.checkpointId;
+              }
+            });
+          });
+
+          (session.devices || []).forEach((dev) => {
+            const devEl = document.createElement('div');
+            devEl.className = 'ck-device';
+            const label = document.createElement('div');
+            label.className = 'ck-device-label';
+            label.textContent = '\uD83D\uDCBB ' + (dev.deviceName || dev.deviceId || 'Device');
+            devEl.appendChild(label);
+            (dev.checkpoints || []).forEach((cp) => {
+              const line = document.createElement('div');
+              line.className = 'ck-checkpoint-line' + (cp.checkpointId === latestId ? ' is-latest' : '');
+              line.title = cp.summary || cp.title || '';
+              line.innerHTML =
+                '<div>' + escapeHtml(cp.title || 'Checkpoint') + '</div>'
+                + '<div class="ck-cp-meta">' + escapeHtml(formatDate(cp.createdAt)) + (cp.checkpointId === latestId ? ' \u2022 latest' : '') + '</div>';
+              devEl.appendChild(line);
+            });
+            devicesBox.appendChild(devEl);
+          });
+
+          sEl.appendChild(devicesBox);
+          sessionsBox.appendChild(sEl);
+        });
+
+        wsEl.appendChild(sessionsBox);
+        container.appendChild(wsEl);
+      });
+
+      checkpointList.innerHTML = '';
+      checkpointList.appendChild(container);
     }
 
     function renderChangeSummaries(changes) {
@@ -1040,15 +1131,14 @@ function renderDashboardHtml() {
         return;
       }
 
-      const params = new URLSearchParams();
-      if (deviceFilter.value) params.set('deviceId', deviceFilter.value);
-      if (workspaceFilter.value) params.set('workspaceKey', workspaceFilter.value);
-      params.set('limit', '12');
-      const query = params.toString();
-      const response = await fetchJson('/api/v1/checkpoints' + (query ? '?' + query : ''), {
-        headers: authHeaders()
-      });
-      renderCheckpoints(response.checkpoints || []);
+      try {
+        const response = await fetchJson('/api/v1/restore/tree?limit=200', {
+          headers: authHeaders()
+        });
+        renderCheckpointTree(response.tree || []);
+      } catch (error) {
+        renderCheckpoints([]);
+      }
     }
 
     async function handleLogin(event) {

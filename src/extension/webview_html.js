@@ -190,6 +190,37 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         flex-direction: column;
         gap: 10px;
       }
+      .utility-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 90%, black 10%);
+      }
+      .auth-summary {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+      .auth-title {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .auth-meta {
+        font-size: 11px;
+        opacity: 0.72;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .auth-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
       .bubble {
         max-width: 92%;
         padding: 11px 13px;
@@ -596,6 +627,13 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         line-height: 1;
         box-shadow: none;
       }
+      .toolbar-button {
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        line-height: 1;
+        box-shadow: none;
+      }
       button:hover:not(:disabled) {
         filter: brightness(1.05);
         transform: translateY(-1px);
@@ -628,6 +666,276 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         font-size: 12px;
         padding-left: 2px;
       }
+      .auth-overlay {
+        position: fixed;
+        inset: 0;
+        background: color-mix(in srgb, var(--vscode-editor-background) 60%, black 40%);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .auth-overlay.is-open {
+        display: flex;
+      }
+      .auth-dialog {
+        width: min(420px, 100%);
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        background: var(--mochi-surface);
+        border: 1px solid var(--mochi-border);
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        padding: 18px 18px 16px;
+        display: grid;
+        gap: 14px;
+      }
+      .auth-dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .auth-dialog-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .auth-dialog-close {
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        border: 0;
+        box-shadow: none;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .auth-dialog-close:hover {
+        opacity: 1;
+        background: color-mix(in srgb, var(--vscode-editor-foreground) 8%, transparent);
+        transform: none;
+      }
+      .auth-dialog-tabs {
+        display: flex;
+        gap: 6px;
+        border-bottom: 1px solid var(--mochi-border);
+        padding-bottom: 0;
+      }
+      .auth-tab {
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .auth-tab.is-active {
+        opacity: 1;
+        border-bottom-color: var(--mochi-accent);
+        color: var(--mochi-accent);
+      }
+      .auth-tab:hover:not(:disabled) {
+        opacity: 1;
+        transform: none;
+        box-shadow: none;
+        background: transparent;
+      }
+      .auth-form {
+        display: grid;
+        gap: 10px;
+      }
+      .auth-field {
+        display: grid;
+        gap: 4px;
+      }
+      .auth-field label {
+        font-size: 11px;
+        opacity: 0.78;
+        font-weight: 500;
+      }
+      .auth-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 13px;
+        line-height: 1.4;
+        border-radius: 8px;
+        border: 1px solid var(--vscode-input-border, rgba(127,127,127,0.5));
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+      }
+      .auth-input:focus {
+        outline: none;
+        border-color: var(--mochi-accent);
+        box-shadow: 0 0 0 1px var(--mochi-accent);
+      }
+      .auth-error {
+        display: none;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.18)) 70%, var(--mochi-surface) 30%);
+        border: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 40%, transparent);
+        color: var(--vscode-errorForeground, #f14c4c);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .auth-error.is-shown {
+        display: block;
+      }
+      .auth-actions-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .auth-submit {
+        padding: 8px 14px;
+        font-size: 12px;
+        border-radius: 999px;
+      }
+      .auth-hint {
+        font-size: 11px;
+        opacity: 0.65;
+        line-height: 1.45;
+      }
+      .restore-list {
+        display: grid;
+        gap: 8px;
+      }
+      .restore-empty {
+        font-size: 12px;
+        opacity: 0.7;
+        text-align: center;
+        padding: 24px 6px;
+      }
+      .restore-card {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--mochi-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+        cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease;
+      }
+      .restore-card:hover {
+        border-color: var(--mochi-accent);
+        background: color-mix(in srgb, var(--mochi-accent) 10%, var(--vscode-editor-background) 90%);
+      }
+      .restore-card-title {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .restore-card-meta {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+      .restore-card-summary {
+        font-size: 12px;
+        opacity: 0.85;
+        line-height: 1.45;
+      }
+      .ck-tree {
+        display: grid;
+        gap: 6px;
+        padding-right: 4px;
+      }
+      .ck-workspace {
+        border: 1px solid var(--mochi-border);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent);
+        overflow: hidden;
+      }
+      .ck-workspace-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--mochi-accent) 8%, transparent);
+        border-bottom: 1px solid transparent;
+        user-select: none;
+      }
+      .ck-workspace.is-open > .ck-workspace-header {
+        border-bottom-color: var(--mochi-border);
+      }
+      .ck-caret {
+        display: inline-block;
+        width: 10px;
+        text-align: center;
+        opacity: 0.7;
+        transition: transform 120ms ease;
+      }
+      .ck-workspace.is-open > .ck-workspace-header > .ck-caret { transform: rotate(90deg); }
+      .ck-session.is-open > .ck-session-header > .ck-caret { transform: rotate(90deg); }
+      .ck-workspace-meta { margin-left: auto; font-size: 11px; opacity: 0.65; font-weight: 400; }
+      .ck-sessions { display: none; padding: 4px 6px 8px 18px; }
+      .ck-workspace.is-open > .ck-sessions { display: block; }
+      .ck-session {
+        margin-top: 4px;
+        border-left: 2px solid color-mix(in srgb, var(--mochi-accent) 40%, var(--mochi-border) 60%);
+        padding-left: 8px;
+      }
+      .ck-session-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        cursor: pointer;
+        font-size: 12px;
+        user-select: none;
+        border-radius: 6px;
+      }
+      .ck-session-header:hover { background: color-mix(in srgb, var(--mochi-accent) 10%, transparent); }
+      .ck-session-title { font-weight: 600; }
+      .ck-session-meta { margin-left: auto; font-size: 11px; opacity: 0.65; font-weight: 400; }
+      .ck-devices { display: none; padding: 4px 0 6px 14px; }
+      .ck-session.is-open > .ck-devices { display: block; }
+      .ck-device {
+        margin-top: 6px;
+      }
+      .ck-device-label {
+        font-size: 11px;
+        opacity: 0.7;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+      .ck-checkpoint-line {
+        position: relative;
+        padding: 6px 8px 6px 16px;
+        margin-left: 4px;
+        border-left: 1px dashed color-mix(in srgb, var(--mochi-accent) 35%, transparent);
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: 12px;
+        line-height: 1.4;
+        display: grid;
+        gap: 2px;
+      }
+      .ck-checkpoint-line::before {
+        content: "";
+        position: absolute;
+        left: -4px;
+        top: 11px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--mochi-accent);
+        box-shadow: 0 0 0 2px var(--vscode-editor-background);
+      }
+      .ck-checkpoint-line:hover { background: color-mix(in srgb, var(--mochi-accent) 12%, transparent); }
+      .ck-checkpoint-line.is-latest::before { background: #2f7d4d; }
+      .ck-cp-meta { font-size: 10px; opacity: 0.65; }
     </style>
   </head>
   <body>
@@ -639,6 +947,19 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           </div>
           <div id="sessionTabs" class="session-tabs" aria-label="Mochi sessions"></div>
           <button class="tab-add-button" id="newSession" type="button" title="New session">+</button>
+        </div>
+      </div>
+      <div class="utility-bar">
+        <div class="auth-summary">
+          <div id="authTitle" class="auth-title">Signed out</div>
+          <div id="authMeta" class="auth-meta">Sign in to enable cloud checkpoint sync and cross-device restore.</div>
+        </div>
+        <div class="auth-actions">
+          <button id="signInButton" class="ghost toolbar-button" type="button">Sign In</button>
+          <button id="registerButton" class="ghost toolbar-button" type="button">Register</button>
+          <button id="signOutButton" class="ghost toolbar-button" type="button" hidden>Sign Out</button>
+          <button id="restoreButton" class="ghost toolbar-button" type="button" hidden>Restore</button>
+          <button id="workspaceButton" class="ghost toolbar-button" type="button">Workspace</button>
         </div>
       </div>
       <div id="messages" class="messages">
@@ -657,6 +978,54 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         </div>
       </div>
     </div>
+    <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="authDialogTitle">
+      <div class="auth-dialog">
+        <div class="auth-dialog-header">
+          <div id="authDialogTitle" class="auth-dialog-title">Sign in to Mochi</div>
+          <button id="authDialogClose" class="auth-dialog-close" type="button" aria-label="Close">x</button>
+        </div>
+        <div class="auth-dialog-tabs" role="tablist">
+          <button id="authTabSignIn" class="auth-tab is-active" type="button" role="tab">Sign In</button>
+          <button id="authTabRegister" class="auth-tab" type="button" role="tab">Register</button>
+        </div>
+        <form id="authForm" class="auth-form" autocomplete="off">
+          <div id="authErrorBox" class="auth-error" role="alert"></div>
+          <div id="authFieldDisplayName" class="auth-field" hidden>
+            <label for="authDisplayName">Display name</label>
+            <input id="authDisplayName" class="auth-input" type="text" autocomplete="off" />
+          </div>
+          <div class="auth-field">
+            <label for="authEmail">Email</label>
+            <input id="authEmail" class="auth-input" type="email" autocomplete="off" required />
+          </div>
+          <div class="auth-field">
+            <label for="authPassword">Password</label>
+            <input id="authPassword" class="auth-input" type="password" autocomplete="new-password" required />
+          </div>
+          <div class="auth-field">
+            <label for="authDeviceName">Device name</label>
+            <input id="authDeviceName" class="auth-input" type="text" autocomplete="off" />
+          </div>
+          <div class="auth-hint">Credentials are sent only to the configured Mochi identity service. The auth token is stored in VS Code SecretStorage.</div>
+          <div class="auth-actions-row">
+            <button id="authCancel" type="button" class="ghost toolbar-button">Cancel</button>
+            <button id="authSubmit" type="submit" class="auth-submit">Sign In</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="restoreOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="restoreDialogTitle">
+      <div class="auth-dialog">
+        <div class="auth-dialog-header">
+          <div id="restoreDialogTitle" class="auth-dialog-title">Restore checkpoint</div>
+          <button id="restoreDialogClose" class="auth-dialog-close" type="button" aria-label="Close">x</button>
+        </div>
+        <div class="auth-hint">Pick a checkpoint to hydrate into the current workspace. Checkpoints are scoped to your account.</div>
+        <div id="restoreList" class="restore-list">
+          <div class="restore-empty">Loading checkpoints...</div>
+        </div>
+      </div>
+    </div>
     <script>
       (function () {
         const vscode = acquireVsCodeApi();
@@ -667,7 +1036,13 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         const privateToggleButton = document.getElementById("privateToggle");
         const newSessionButton = document.getElementById("newSession");
         const sessionTabsEl = document.getElementById("sessionTabs");
-        const slashMenuEl = document.getElementById("slashMenu");
+        const authTitleEl = document.getElementById("authTitle");
+        const authMetaEl = document.getElementById("authMeta");
+        const signInButton = document.getElementById("signInButton");
+        const registerButton = document.getElementById("registerButton");
+        const signOutButton = document.getElementById("signOutButton");
+        const restoreButton = document.getElementById("restoreButton");
+        const workspaceButton = document.getElementById("workspaceButton");
         let pendingEl = null;
         let pendingShellEl = null;
         let activityStackEl = null;
@@ -677,10 +1052,15 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         let loadedBaseSessionId = "";
         let latestSessionSyncVersion = 0;
         let sessions = [];
-        let slashMenuOpen = false;
-        let slashMatches = [];
-        let slashActiveIndex = 0;
-        let privateWindowOn = false;
+        let authState = {
+          isSignedIn: false,
+          email: "",
+          displayName: "",
+          userId: "",
+          deviceName: "",
+          workspaceRoot: "",
+          workspaceSelected: false
+        };
         const draftsBySession = Object.create(null);
         const approvalCards = new Map();
         const slashCommands = [
@@ -717,6 +1097,318 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             detail: "Set provider, API key, base URL, model, and API format."
           }
         ];
+
+        function renderAuthState(nextState) {
+          authState = Object.assign({}, authState, nextState || {});
+
+          if (authState.isSignedIn) {
+            const title = authState.displayName || authState.email || authState.userId || "Signed in";
+            authTitleEl.textContent = "Signed in as " + title;
+            authMetaEl.textContent = [
+              authState.email || authState.userId || "",
+              authState.deviceName ? ("Device: " + authState.deviceName) : "",
+              authState.workspaceRoot ? ("Workspace: " + authState.workspaceRoot) : "Workspace: none selected"
+            ].filter(Boolean).join("\\n");
+          } else {
+            authTitleEl.textContent = "Signed out";
+            authMetaEl.textContent = authState.workspaceRoot
+              ? "Sign in to enable cloud checkpoint sync and restore.\\nWorkspace: " + authState.workspaceRoot
+              : "Sign in to enable cloud checkpoint sync and cross-device restore.";
+          }
+
+          signInButton.hidden = Boolean(authState.isSignedIn);
+          registerButton.hidden = Boolean(authState.isSignedIn);
+          signOutButton.hidden = !authState.isSignedIn;
+          restoreButton.hidden = !authState.isSignedIn;
+          restoreButton.disabled = !authState.isSignedIn;
+          workspaceButton.textContent = authState.workspaceSelected ? "Switch Workspace" : "Select Workspace";
+        }
+
+        const authOverlayEl = document.getElementById("authOverlay");
+        const authDialogTitleEl = document.getElementById("authDialogTitle");
+        const authTabSignInEl = document.getElementById("authTabSignIn");
+        const authTabRegisterEl = document.getElementById("authTabRegister");
+        const authFormEl = document.getElementById("authForm");
+        const authErrorBoxEl = document.getElementById("authErrorBox");
+        const authFieldDisplayNameEl = document.getElementById("authFieldDisplayName");
+        const authDisplayNameEl = document.getElementById("authDisplayName");
+        const authEmailEl = document.getElementById("authEmail");
+        const authPasswordEl = document.getElementById("authPassword");
+        const authDeviceNameEl = document.getElementById("authDeviceName");
+        const authSubmitEl = document.getElementById("authSubmit");
+        const authCancelEl = document.getElementById("authCancel");
+        const authDialogCloseEl = document.getElementById("authDialogClose");
+        const restoreOverlayEl = document.getElementById("restoreOverlay");
+        const restoreListEl = document.getElementById("restoreList");
+        const restoreDialogCloseEl = document.getElementById("restoreDialogClose");
+
+        let authMode = "signin";
+        let authBusy = false;
+
+        function setAuthMode(mode) {
+          authMode = mode === "register" ? "register" : "signin";
+          if (authMode === "register") {
+            authDialogTitleEl.textContent = "Register a Mochi account";
+            authTabRegisterEl.classList.add("is-active");
+            authTabSignInEl.classList.remove("is-active");
+            authFieldDisplayNameEl.hidden = false;
+            authSubmitEl.textContent = "Create account";
+          } else {
+            authDialogTitleEl.textContent = "Sign in to Mochi";
+            authTabSignInEl.classList.add("is-active");
+            authTabRegisterEl.classList.remove("is-active");
+            authFieldDisplayNameEl.hidden = true;
+            authSubmitEl.textContent = "Sign In";
+          }
+          hideAuthError();
+        }
+
+        function showAuthError(message) {
+          authErrorBoxEl.textContent = String(message || "");
+          authErrorBoxEl.classList.add("is-shown");
+        }
+
+        function hideAuthError() {
+          authErrorBoxEl.textContent = "";
+          authErrorBoxEl.classList.remove("is-shown");
+        }
+
+        function setAuthBusy(busy) {
+          authBusy = Boolean(busy);
+          authSubmitEl.disabled = authBusy;
+          authCancelEl.disabled = authBusy;
+          if (authBusy) {
+            authSubmitEl.dataset.label = authSubmitEl.textContent;
+            authSubmitEl.textContent = "Working...";
+          } else if (authSubmitEl.dataset.label) {
+            authSubmitEl.textContent = authSubmitEl.dataset.label;
+            delete authSubmitEl.dataset.label;
+          }
+        }
+
+        function openAuthDialog(mode) {
+          setAuthMode(mode);
+          if (!authDeviceNameEl.value) {
+            authDeviceNameEl.value = authState.deviceName || "This Machine";
+          }
+          authOverlayEl.classList.add("is-open");
+          setTimeout(function () {
+            (authMode === "register" ? authDisplayNameEl : authEmailEl).focus();
+          }, 30);
+        }
+
+        function closeAuthDialog() {
+          if (authBusy) {
+            return;
+          }
+          authOverlayEl.classList.remove("is-open");
+          authPasswordEl.value = "";
+          hideAuthError();
+        }
+
+        authTabSignInEl.addEventListener("click", function () {
+          setAuthMode("signin");
+        });
+        authTabRegisterEl.addEventListener("click", function () {
+          setAuthMode("register");
+        });
+        authCancelEl.addEventListener("click", closeAuthDialog);
+        authDialogCloseEl.addEventListener("click", closeAuthDialog);
+        authOverlayEl.addEventListener("click", function (event) {
+          if (event.target === authOverlayEl) {
+            closeAuthDialog();
+          }
+        });
+        authFormEl.addEventListener("submit", function (event) {
+          event.preventDefault();
+          if (authBusy) {
+            return;
+          }
+          const payload = {
+            mode: authMode,
+            email: authEmailEl.value.trim(),
+            password: authPasswordEl.value,
+            deviceName: authDeviceNameEl.value.trim() || "This Machine"
+          };
+          if (authMode === "register") {
+            payload.displayName = authDisplayNameEl.value.trim();
+            if (!payload.displayName) {
+              showAuthError("Display name is required.");
+              authDisplayNameEl.focus();
+              return;
+            }
+          }
+          if (!payload.email) {
+            showAuthError("Email is required.");
+            authEmailEl.focus();
+            return;
+          }
+          if (!payload.password) {
+            showAuthError("Password is required.");
+            authPasswordEl.focus();
+            return;
+          }
+          hideAuthError();
+          setAuthBusy(true);
+          vscode.postMessage({ type: "authSubmit", value: payload });
+        });
+
+        function openRestoreDialog() {
+          restoreOverlayEl.classList.add("is-open");
+          restoreListEl.className = "restore-list";
+          restoreListEl.innerHTML = '<div class="restore-empty">Loading checkpoints...</div>';
+          vscode.postMessage({ type: "loadCheckpointTree" });
+        }
+        function closeRestoreDialog() {
+          restoreOverlayEl.classList.remove("is-open");
+        }
+        restoreDialogCloseEl.addEventListener("click", closeRestoreDialog);
+        restoreOverlayEl.addEventListener("click", function (event) {
+          if (event.target === restoreOverlayEl) {
+            closeRestoreDialog();
+          }
+        });
+
+        function formatCheckpointTime(value) {
+          if (!value) return "";
+          const d = new Date(value);
+          if (Number.isNaN(d.getTime())) return "";
+          return d.toLocaleString();
+        }
+
+        function buildCheckpointLine(cp, isLatest) {
+          const line = document.createElement("div");
+          line.className = "ck-checkpoint-line" + (isLatest ? " is-latest" : "");
+          line.tabIndex = 0;
+          line.title = cp.summary || cp.title || "";
+
+          const titleSpan = document.createElement("div");
+          titleSpan.textContent = cp.title || "Checkpoint";
+          line.appendChild(titleSpan);
+
+          const meta = document.createElement("div");
+          meta.className = "ck-cp-meta";
+          meta.textContent = formatCheckpointTime(cp.createdAt) + (isLatest ? "  \\u2022 latest" : "");
+          line.appendChild(meta);
+
+          const trigger = function () {
+            if (!cp.checkpointId) return;
+            restoreListEl.innerHTML = '<div class="restore-empty">Restoring...</div>';
+            vscode.postMessage({ type: "restoreCheckpointById", value: { checkpointId: cp.checkpointId } });
+          };
+          line.addEventListener("click", trigger);
+          line.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              trigger();
+            }
+          });
+          return line;
+        }
+
+        function renderCheckpointTree(tree) {
+          restoreListEl.className = "ck-tree";
+          restoreListEl.innerHTML = "";
+          if (!Array.isArray(tree) || !tree.length) {
+            const empty = document.createElement("div");
+            empty.className = "restore-empty";
+            empty.textContent = "No cloud checkpoints found for this account.";
+            restoreListEl.appendChild(empty);
+            return;
+          }
+
+          tree.forEach(function (workspace, wsIdx) {
+            const wsEl = document.createElement("div");
+            wsEl.className = "ck-workspace" + (wsIdx === 0 ? " is-open" : "");
+
+            const wsHeader = document.createElement("div");
+            wsHeader.className = "ck-workspace-header";
+            const caret1 = document.createElement("span");
+            caret1.className = "ck-caret";
+            caret1.textContent = "\\u25B6";
+            wsHeader.appendChild(caret1);
+            const wsLabel = document.createElement("span");
+            wsLabel.textContent = workspace.workspaceLabel || workspace.workspaceKey || "Workspace";
+            wsHeader.appendChild(wsLabel);
+            const wsMeta = document.createElement("span");
+            wsMeta.className = "ck-workspace-meta";
+            const sessionCount = (workspace.sessions || []).length;
+            wsMeta.textContent = sessionCount + (sessionCount === 1 ? " session" : " sessions");
+            wsHeader.appendChild(wsMeta);
+            wsHeader.addEventListener("click", function () { wsEl.classList.toggle("is-open"); });
+            wsEl.appendChild(wsHeader);
+
+            const sessionsBox = document.createElement("div");
+            sessionsBox.className = "ck-sessions";
+
+            (workspace.sessions || []).forEach(function (session, sIdx) {
+              const sEl = document.createElement("div");
+              sEl.className = "ck-session" + (wsIdx === 0 && sIdx === 0 ? " is-open" : "");
+
+              const sHeader = document.createElement("div");
+              sHeader.className = "ck-session-header";
+              const caret2 = document.createElement("span");
+              caret2.className = "ck-caret";
+              caret2.textContent = "\\u25B6";
+              sHeader.appendChild(caret2);
+              const sTitle = document.createElement("span");
+              sTitle.className = "ck-session-title";
+              sTitle.textContent = session.title || session.baseSessionId || "Session";
+              sHeader.appendChild(sTitle);
+              const sMeta = document.createElement("span");
+              sMeta.className = "ck-session-meta";
+              sMeta.textContent = session.checkpointCount + (session.checkpointCount === 1 ? " checkpoint" : " checkpoints");
+              sHeader.appendChild(sMeta);
+              sHeader.addEventListener("click", function () { sEl.classList.toggle("is-open"); });
+              sEl.appendChild(sHeader);
+
+              const devicesBox = document.createElement("div");
+              devicesBox.className = "ck-devices";
+
+              // Find latest checkpoint id across all devices in this session
+              let latestId = "";
+              let latestAt = "";
+              (session.devices || []).forEach(function (dev) {
+                (dev.checkpoints || []).forEach(function (cp) {
+                  if (String(cp.createdAt) > String(latestAt)) {
+                    latestAt = cp.createdAt;
+                    latestId = cp.checkpointId;
+                  }
+                });
+              });
+
+              (session.devices || []).forEach(function (dev) {
+                const devEl = document.createElement("div");
+                devEl.className = "ck-device";
+                const devLabel = document.createElement("div");
+                devLabel.className = "ck-device-label";
+                devLabel.textContent = "\\uD83D\\uDCBB " + (dev.deviceName || dev.deviceId || "Device");
+                devEl.appendChild(devLabel);
+                (dev.checkpoints || []).forEach(function (cp) {
+                  devEl.appendChild(buildCheckpointLine(cp, cp.checkpointId === latestId));
+                });
+                devicesBox.appendChild(devEl);
+              });
+
+              sEl.appendChild(devicesBox);
+              sessionsBox.appendChild(sEl);
+            });
+
+            wsEl.appendChild(sessionsBox);
+            restoreListEl.appendChild(wsEl);
+          });
+        }
+
+        document.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            if (authOverlayEl.classList.contains("is-open")) {
+              closeAuthDialog();
+            }
+            if (restoreOverlayEl.classList.contains("is-open")) {
+              closeRestoreDialog();
+            }
+          }
+        });
 
         function scrollToBottom() {
           messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1527,6 +2219,28 @@ function getWebviewHtml({ logoUri = "" } = {}) {
           vscode.postMessage({ type: "newSession" });
         });
 
+        signInButton.addEventListener("click", function () {
+          openAuthDialog("signin");
+        });
+
+        registerButton.addEventListener("click", function () {
+          openAuthDialog("register");
+        });
+
+        signOutButton.addEventListener("click", function () {
+          statusEl.textContent = "Signing out...";
+          vscode.postMessage({ type: "authSignOut" });
+        });
+
+        restoreButton.addEventListener("click", function () {
+          openRestoreDialog();
+        });
+
+        workspaceButton.addEventListener("click", function () {
+          statusEl.textContent = "Selecting workspace...";
+          vscode.postMessage({ type: "selectWorkspace" });
+        });
+
         promptEl.addEventListener("input", function () {
           saveCurrentDraft();
           updateSlashMenu();
@@ -1718,6 +2432,40 @@ function getWebviewHtml({ logoUri = "" } = {}) {
             return;
           }
 
+          if (message.type === "authState") {
+            renderAuthState(message.value || {});
+            statusEl.textContent = "Ready.";
+            return;
+          }
+
+          if (message.type === "authResult") {
+            const value = message.value || {};
+            setAuthBusy(false);
+            if (value.ok) {
+              closeAuthDialog();
+              statusEl.textContent = value.message || "Signed in.";
+            } else {
+              showAuthError(value.error || "Authentication failed.");
+            }
+            return;
+          }
+
+          if (message.type === "checkpointTree") {
+            renderCheckpointTree(message.value || []);
+            return;
+          }
+
+          if (message.type === "checkpointRestoreResult") {
+            const value = message.value || {};
+            if (value.ok) {
+              closeRestoreDialog();
+              statusEl.textContent = value.message || "Checkpoint restored.";
+            } else {
+              restoreListEl.innerHTML = '<div class="restore-empty">' + escapeHtml(value.error || "Failed to restore checkpoint.") + '</div>';
+            }
+            return;
+          }
+
           if (message.type === "sessionList") {
             if (!acceptSessionSyncMessage(message)) {
               return;
@@ -1750,6 +2498,7 @@ function getWebviewHtml({ logoUri = "" } = {}) {
         });
 
         statusEl.textContent = "Ready.";
+        renderAuthState(authState);
         vscode.postMessage({ type: "ready" });
       })();
     </script>
