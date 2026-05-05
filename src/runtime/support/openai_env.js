@@ -4,7 +4,7 @@ const path = require("path");
 
 const OPENAI_ENV_FILE = path.join(os.homedir(), ".openai-env");
 
-function loadOpenAIEnvFile({ override = true } = {}) {
+function loadOpenAIEnvFile({ override = false } = {}) {
   if (!fs.existsSync(OPENAI_ENV_FILE)) {
     return;
   }
